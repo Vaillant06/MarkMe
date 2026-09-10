@@ -1,0 +1,22 @@
+# Environment variables
+.env
+.env.local
+
+# Python
+backend/venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+markme.db
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE / OS
+.DS_Store
+.vscode/
+.idea/
