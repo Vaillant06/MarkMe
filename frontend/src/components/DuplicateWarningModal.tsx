@@ -1,24 +1,28 @@
 import React from 'react';
-import { AlertTriangle, X, Check } from 'lucide-react';
+import { AlertTriangle, X, Check, Eye } from 'lucide-react';
 
 interface DuplicateWarningModalProps {
   isOpen: boolean;
+  isSaving?: boolean;
   subjectCode: string;
   date: string;
   period: string;
   colLetter?: string;
   onCancel: () => void;
   onProceedOverwrite: () => void;
+  onReviewPreview?: () => void;
 }
 
 export const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
   isOpen,
+  isSaving = false,
   subjectCode,
   date,
   period,
   colLetter,
   onCancel,
   onProceedOverwrite,
+  onReviewPreview,
 }) => {
   if (!isOpen) return null;
 
@@ -63,20 +67,46 @@ export const DuplicateWarningModal: React.FC<DuplicateWarningModalProps> = ({
             Overwriting will update the existing column in the Excel workbook. If you did not intend to modify previous attendance, click <span className="font-semibold">Cancel</span>.
           </p>
 
-          <div className="flex space-x-3 pt-2">
+          <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
             <button
+              type="button"
               onClick={onCancel}
-              className="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 font-medium text-sm transition flex items-center justify-center space-x-1.5"
+              disabled={isSaving}
+              className="px-3.5 py-2.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 font-medium text-xs sm:text-sm transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
             >
               <X className="w-4 h-4" />
               <span>Cancel</span>
             </button>
+
+            {onReviewPreview && (
+              <button
+                type="button"
+                onClick={onReviewPreview}
+                disabled={isSaving}
+                className="px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
+              >
+                <Eye className="w-4 h-4" />
+                <span>Review Preview</span>
+              </button>
+            )}
+
             <button
+              type="button"
               onClick={onProceedOverwrite}
-              className="flex-1 px-4 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm transition shadow-sm flex items-center justify-center space-x-1.5"
+              disabled={isSaving}
+              className="flex-1 px-4 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs sm:text-sm transition shadow-sm flex items-center justify-center space-x-1.5 disabled:opacity-50"
             >
-              <Check className="w-4 h-4" />
-              <span>Confirm & Overwrite</span>
+              {isSaving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Overwriting...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Confirm & Overwrite</span>
+                </>
+              )}
             </button>
           </div>
         </div>

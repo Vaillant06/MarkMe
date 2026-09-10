@@ -459,18 +459,20 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
         preview={previewData}
         isSaving={isSaving}
         onClose={() => setIsPreviewOpen(false)}
-        onConfirmSave={() => handleConfirmSave(false)}
+        onConfirmSave={() => handleConfirmSave(Boolean(previewData?.duplicate_warning))}
       />
 
       {/* Duplicate Warning Modal */}
       <DuplicateWarningModal
         isOpen={isDuplicateModalOpen}
+        isSaving={isSaving}
         subjectCode={previewData?.subject_code || selectedSheet}
         date={date}
         period={period}
         colLetter={previewData?.existing_session_col_letter}
         onCancel={() => setIsDuplicateModalOpen(false)}
-        onProceedOverwrite={() => {
+        onProceedOverwrite={() => handleConfirmSave(true)}
+        onReviewPreview={() => {
           setIsDuplicateModalOpen(false);
           setIsPreviewOpen(true);
         }}

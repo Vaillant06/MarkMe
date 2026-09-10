@@ -92,6 +92,15 @@ export const AttendancePreviewModal: React.FC<AttendancePreviewModalProps> = ({
           </div>
         </div>
 
+        {/* Duplicate Overwrite Warning Banner if Applicable */}
+        {preview.duplicate_warning && (
+          <div className="px-6 py-2.5 bg-amber-50 border-b border-amber-200 text-xs text-amber-900 flex items-center justify-between">
+            <span>
+              <strong>Overwrite Notice:</strong> Saving will overwrite the existing attendance session for {preview.date} (Period {preview.period}) in <strong>Col {preview.existing_session_col_letter}</strong>.
+            </span>
+          </div>
+        )}
+
         {/* Toolbar: Search & Filters */}
         <div className="px-6 py-3 border-b border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0">
           <div className="relative w-full sm:w-72">
@@ -224,17 +233,21 @@ export const AttendancePreviewModal: React.FC<AttendancePreviewModalProps> = ({
           <button
             onClick={onConfirmSave}
             disabled={isSaving}
-            className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm transition shadow-sm flex items-center space-x-2 disabled:opacity-50"
+            className={`px-6 py-2.5 rounded-lg text-white font-semibold text-xs sm:text-sm transition shadow-sm flex items-center space-x-2 disabled:opacity-50 ${
+              preview.duplicate_warning
+                ? 'bg-amber-600 hover:bg-amber-700'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             {isSaving ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>Saving to Google Drive...</span>
+                <span>{preview.duplicate_warning ? 'Overwriting...' : 'Saving to Google Drive...'}</span>
               </>
             ) : (
               <>
                 <Save className="w-4 h-4" />
-                <span>Confirm & Save Attendance</span>
+                <span>{preview.duplicate_warning ? 'Confirm & Overwrite Session' : 'Confirm & Save Attendance'}</span>
               </>
             )}
           </button>
