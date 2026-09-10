@@ -94,13 +94,17 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
     const validTokens: string[] = [];
 
     for (const t of rawTokens) {
-      if (!/^\d{3}$/.test(t)) {
+      // Accepts both 2-digit (e.g. 67) and 3-digit (e.g. 067)
+      if (!/^\d{1,3}$/.test(t)) {
         invalids.push(t);
-      } else if (seen.has(t)) {
-        duplicates.push(t);
       } else {
-        seen.add(t);
-        validTokens.push(t);
+        const normalized = t.padStart(3, '0');
+        if (seen.has(normalized)) {
+          duplicates.push(t !== normalized ? `${t} (${normalized})` : t);
+        } else {
+          seen.add(normalized);
+          validTokens.push(normalized);
+        }
       }
     }
     return { tokens: validTokens, duplicates, invalids };
@@ -315,7 +319,7 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
             <div className="md:col-span-2 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  {entryMode === 'ABSENT' ? 'Absent Students' : 'Present Students'} (Last 3 Digits of Register Numbers)
+                  {entryMode === 'ABSENT' ? 'Absent Students' : 'Present Students'} (Last 2 or 3 Digits, e.g. 67 or 067)
                 </label>
 
                 {/* Slider Switch */}
@@ -364,8 +368,8 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
                   onChange={(e) => setStudentInput(e.target.value)}
                   placeholder={
                     entryMode === 'ABSENT'
-                      ? 'e.g. 067, 080, 114, 129 (students who are absent)'
-                      : 'e.g. 001, 002, 003, 005 (students who are present)'
+                      ? 'e.g. 67, 80, 114, 129 (or 067, 080...)'
+                      : 'e.g. 67, 80, 114, 129 (or 067, 080...)'
                   }
                   className={`w-full bg-slate-50 border rounded-2xl p-4 text-base font-mono text-slate-900 focus:bg-white outline-none transition leading-relaxed shadow-inner ${
                     entryMode === 'ABSENT'
@@ -404,7 +408,7 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
                   <span
                     key={`inv-${idx}`}
                     className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-100 text-amber-800 border border-amber-300 line-through"
-                    title="Not a 3-digit number"
+                    title="Not a valid 2 or 3-digit number"
                   >
                     <span>{inv} (invalid)</span>
                   </span>
