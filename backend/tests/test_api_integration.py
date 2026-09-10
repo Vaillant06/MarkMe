@@ -125,6 +125,21 @@ def test_complete_api_flow():
     assert "067" not in p_pres_data["absent_suffixes"]
     assert "080" not in p_pres_data["absent_suffixes"]
 
+    # 7c. Attendance Preview - 2-digit numbers (e.g. 67, 80)
+    preview_2digit_res = client.post("/api/attendance/preview", json={
+        "file_id": file_id,
+        "sheet_name": "UIT3562",
+        "date": "10/09/2026",
+        "period": "3",
+        "student_input": "67, 80, 114, 129",
+        "entry_mode": "ABSENT"
+    })
+    assert preview_2digit_res.status_code == 200
+    p_2d_data = preview_2digit_res.json()
+    assert p_2d_data["absent_count"] == 4
+    assert "067" in p_2d_data["absent_suffixes"]
+    assert "080" in p_2d_data["absent_suffixes"]
+
     # 8. Attendance Preview - Validation Errors
     # Invalid character
     err_res1 = client.post("/api/attendance/preview", json={

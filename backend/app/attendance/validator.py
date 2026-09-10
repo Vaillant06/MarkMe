@@ -39,23 +39,26 @@ def parse_and_validate_suffixes(
     }
     
     for token in tokens:
-        # Check if exactly 3 numeric digits
-        if not re.match(r"^\d{3}$", token):
-            errors.append(f"Invalid format: '{token}' is not a 3-digit number.")
+        # Check if 1 to 3 numeric digits (accepts both e.g. '67' and '067')
+        if not re.match(r"^\d{1,3}$", token):
+            errors.append(f"Invalid format: '{token}' is not a 3-digit or 2-digit number.")
             continue
             
+        # Normalize to 3-digit suffix (e.g. '67' -> '067')
+        normalized_token = token.zfill(3)
+        
         # Check duplicates
-        if token in seen:
+        if normalized_token in seen:
             errors.append(f"Duplicate suffix entered: '{token}'.")
             continue
-        seen.add(token)
+        seen.add(normalized_token)
         
         # Check existence in roster
-        if token not in valid_suffix_map:
+        if normalized_token not in valid_suffix_map:
             errors.append(f"Student not found: Suffix '{token}' does not match any student in this class.")
             continue
             
-        cleaned_suffixes.append(token)
+        cleaned_suffixes.append(normalized_token)
         
     if errors:
         raise SuffixValidationError(f"Validation failed for {mode_label} students list.", errors)

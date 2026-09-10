@@ -36,8 +36,21 @@ def test_invalid_suffix_characters(students):
 
 def test_invalid_suffix_length(students):
     with pytest.raises(SuffixValidationError) as exc:
-        parse_and_validate_suffixes("067, 80, 1144", students)
+        parse_and_validate_suffixes("067, 1144, 9999", students)
     assert len(exc.value.errors) == 2
+
+def test_two_digit_and_three_digit_suffixes(students):
+    # Both 2-digit (67, 80) and 3-digit (067, 080) are accepted and normalized to 3 digits
+    res1 = parse_and_validate_suffixes("67, 80, 114, 129", students)
+    assert res1 == ["067", "080", "114", "129"]
+
+    res2 = parse_and_validate_suffixes("067, 80, 114, 129", students)
+    assert res2 == ["067", "080", "114", "129"]
+
+    # 67 and 067 together are flagged as duplicate because they refer to the same student
+    with pytest.raises(SuffixValidationError) as exc:
+        parse_and_validate_suffixes("067, 67", students)
+    assert any("Duplicate" in err for err in exc.value.errors)
 
 def test_nonexistent_student_suffix(students):
     with pytest.raises(SuffixValidationError) as exc:
