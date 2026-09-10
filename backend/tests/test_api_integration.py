@@ -179,6 +179,20 @@ def test_complete_api_flow():
     assert dup_commit.status_code == 409
     assert dup_commit.json()["detail"]["is_duplicate"] is True
 
+    # 10b. Commit Attendance - Allow Overwrite
+    overwrite_commit = client.post("/api/attendance/commit", json={
+        "file_id": file_id,
+        "sheet_name": "UIT3562",
+        "date": "29/06/2026",
+        "period": "1",
+        "absent_suffixes": ["067"],
+        "allow_overwrite": True,
+        "target_col_idx": 6
+    })
+    assert overwrite_commit.status_code == 200
+    assert overwrite_commit.json()["success"] is True
+    assert overwrite_commit.json()["target_col_letter"] == "F"
+
     # 11. Logout
     logout_res = client.post("/api/auth/logout")
     assert logout_res.status_code == 200
