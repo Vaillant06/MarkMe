@@ -28,9 +28,10 @@ def decode_local_id(prefix: str, local_id: str) -> Optional[str]:
         return None
 
 class DriveService:
-    def __init__(self, access_token: Optional[str] = None, refresh_token: Optional[str] = None):
+    def __init__(self, access_token: Optional[str] = None, refresh_token: Optional[str] = None, user_id: Optional[str] = None):
         self.access_token = access_token
         self.refresh_token = refresh_token
+        self.user_id = user_id
         if access_token or refresh_token:
             self.creds = Credentials(
                 token=access_token,
@@ -51,6 +52,16 @@ class DriveService:
     def _get_service(self):
         if not self.creds:
             raise ValueError("Google Drive credentials not available.")
+        if not self.creds.valid and self.creds.refresh_token:
+            try:
+                from google.auth.transport.requests import Request as GoogleRequest
+                self.creds.refresh(GoogleRequest())
+                self.access_token = self.creds.token
+                if self.user_id:
+                    from app.auth.session import update_session_data
+                    update_session_data(self.user_id, {"access_token": self.creds.token})
+            except Exception:
+                pass
         return build("drive", "v3", credentials=self.creds, cache_discovery=False)
 
     @staticmethod

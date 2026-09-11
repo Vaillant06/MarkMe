@@ -1,4 +1,5 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 from typing import Optional
 from pathlib import Path
 
@@ -11,10 +12,11 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/auth/google/callback"
     
-    # Session & Security
+    # Session & Security (remember authentication for 1 month / 30 days)
     SESSION_SECRET: str = "markme-insecure-dev-session-key-change-in-production-12345678"
     SESSION_COOKIE_NAME: str = "markme_session"
-    SESSION_EXPIRE_HOURS: int = 24
+    SESSION_EXPIRE_DAYS: int = 30
+    SESSION_EXPIRE_HOURS: int = 30 * 24  # 720 hours (1 month)
     
     # Storage & Local Dev
     DATABASE_URL: str = "sqlite:///./markme.db"
@@ -24,12 +26,19 @@ class Settings(BaseSettings):
     # Front-end origin for CORS
     FRONTEND_URL: str = "http://localhost:5173"
 
-    class Config:
-        env_file = [
+    model_config = SettingsConfigDict(
+        env_file=[
             str(Path(__file__).resolve().parent.parent.parent / ".env"),
             str(Path(__file__).resolve().parent.parent / ".env"),
             ".env"
-        ]
-        extra = "ignore"
+        ],
+        extra="ignore"
+    )
+
+    @model_validator(mode="after")
+    def sync_session_expiry(self):
+        if "SESSION_EXPIRE_DAYS" in self.model_fields_set and "SESSION_EXPIRE_HOURS" not in self.model_fields_set:
+            self.SESSION_EXPIRE_HOURS = self.SESSION_EXPIRE_DAYS * 24
+        return self
 
 settings = Settings()

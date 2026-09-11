@@ -42,6 +42,7 @@ async def google_callback(code: str, response: Response):
         session_token = create_session_token(user_data)
         
         # Set HTTP-only secure cookie and pass token query param for cross-port robustness
+        session_max_age = settings.SESSION_EXPIRE_HOURS * 3600
         redirect = RedirectResponse(url=f"{settings.FRONTEND_URL}/drive-setup?token={session_token}")
         redirect.set_cookie(
             key=settings.SESSION_COOKIE_NAME,
@@ -49,7 +50,8 @@ async def google_callback(code: str, response: Response):
             httponly=True,
             secure=False,  # Set to True in production HTTPS
             samesite="lax",
-            max_age=settings.SESSION_EXPIRE_HOURS * 3600
+            max_age=session_max_age,
+            expires=session_max_age
         )
         return redirect
     except DomainNotAuthorizedError as e:
@@ -81,6 +83,7 @@ async def mock_login(response: Response):
         "selected_folder_name": "📁 College Attendance Folder (Local Dev)"
     }
     session_token = create_session_token(mock_user)
+    session_max_age = settings.SESSION_EXPIRE_HOURS * 3600
     
     response.set_cookie(
         key=settings.SESSION_COOKIE_NAME,
@@ -88,7 +91,8 @@ async def mock_login(response: Response):
         httponly=True,
         secure=False,
         samesite="lax",
-        max_age=settings.SESSION_EXPIRE_HOURS * 3600
+        max_age=session_max_age,
+        expires=session_max_age
     )
     
     return {
@@ -105,10 +109,28 @@ async def mock_login(response: Response):
     }
 
 @router.get("/me")
-async def get_me(user: dict = Depends(get_current_user)):
+async def get_me(request: Request, response: Response, user: dict = Depends(get_current_user)):
     """
-    Returns current authenticated user details.
+    Returns current authenticated user details and refreshes session cookie.
     """
+    token = request.cookies.get(settings.SESSION_COOKIE_NAME)
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1]
+
+    if token:
+        session_max_age = settings.SESSION_EXPIRE_HOURS * 3600
+        response.set_cookie(
+            key=settings.SESSION_COOKIE_NAME,
+            value=token,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=session_max_age,
+            expires=session_max_age
+        )
+
     return {
         "user": UserProfile(
             id=user.get("id", ""),
@@ -128,6 +150,10 @@ async def logout(request: Request, response: Response):
     Logs out the user and clears session cookie.
     """
     token = request.cookies.get(settings.SESSION_COOKIE_NAME)
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1]
     if token:
         remove_session(token)
     response.delete_cookie(settings.SESSION_COOKIE_NAME)
