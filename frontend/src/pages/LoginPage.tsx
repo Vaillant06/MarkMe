@@ -41,6 +41,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       } else if (res.dev_mode) {
         // Fallback to dev mock login
         const loginRes = await api.mockLogin();
+        if (loginRes.token) {
+          localStorage.setItem('markme_token', loginRes.token);
+        }
         onLoginSuccess(loginRes.user);
       }
     } catch (err: any) {
@@ -54,6 +57,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setErrorMessage(null);
     try {
       const loginRes = await api.mockLogin();
+      if (loginRes.token) {
+        localStorage.setItem('markme_token', loginRes.token);
+      }
       onLoginSuccess(loginRes.user);
     } catch (err: any) {
       setErrorMessage(err.message || 'Mock login failed.');
@@ -66,15 +72,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
         {/* Institutional Branding Top */}
         <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-8 text-center text-white relative">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-900/50">
-            <span className="text-3xl font-extrabold text-white">M</span>
+          <div className="w-36 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-900/50">
+            <span className="text-3xl font-extrabold text-white">MarkMe</span>
           </div>
           <h1 className="text-sm font-semibold tracking-widest uppercase text-blue-300">
             COLLEGE ATTENDANCE SYSTEM
           </h1>
-          <h2 className="text-2xl font-bold mt-1 tracking-tight text-white">
-            Faculty Attendance Portal
-          </h2>
           <p className="text-xs text-slate-400 mt-2">
             Sri Sivasubramaniya Nadar College of Engineering
           </p>
@@ -132,11 +135,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             )}
           </div>
 
-          <div className="pt-2 border-t border-slate-100 text-center">
+          <div className="pt-2 border-t border-slate-100 text-center space-y-1">
             <div className="flex items-center justify-center space-x-1.5 text-xs text-slate-500">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
               <span>Only <span className="font-semibold text-slate-700">@ssn.edu.in</span> accounts are permitted.</span>
             </div>
+            <p className="text-[11px] text-slate-400">
+              Sign-in is remembered on this device for 30 days.
+            </p>
           </div>
         </div>
       </div>

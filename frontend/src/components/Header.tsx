@@ -12,14 +12,14 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
     <header className="bg-slate-900 text-white shadow-md border-b border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-xl text-white shadow-inner">
-            M
+          <div className="w-24 h-10 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-xl text-white shadow-inner">
+            MarkMe
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="font-bold text-lg tracking-tight text-white">MarkMe</span>
+              <span className="font-bold text-lg tracking-tight text-white">SSN</span>
               <span className="text-xs bg-blue-500/20 text-blue-300 font-semibold px-2 py-0.5 rounded border border-blue-400/30">
-                SSN Portal
+                Attendance Portal
               </span>
             </div>
             <p className="text-xs text-slate-400 font-medium hidden sm:block">

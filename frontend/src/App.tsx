@@ -151,7 +151,7 @@ export const App: React.FC = () => {
       </main>
 
       <footer className="py-4 border-t border-slate-200 bg-white text-center text-xs text-slate-500">
-        <p>SSN College of Engineering — Department of Information Technology • MarkMe Portal</p>
+        <p>SSN College of Engineering • MarkMe Attendance Marking Portal</p>
       </footer>
     </div>
   );
