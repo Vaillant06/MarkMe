@@ -116,6 +116,8 @@ GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
 SESSION_SECRET=a-secure-random-secret-key
+SESSION_EXPIRE_DAYS=30
+SESSION_EXPIRE_HOURS=720
 DEV_MODE=True
 ```
 
@@ -184,5 +186,5 @@ All 16 tests verify:
 ## 🔒 Security & Concurrency
 
 - **Domain Restriction**: Enforced on the verified Google ID token payload (`hd == "ssn.edu.in"` and email regex). Client-provided emails are never trusted.
-- **Session Security**: Signed, HTTP-only, SameSite cookies with configurable expiration.
+- **Session Security**: Signed, HTTP-only, SameSite cookies with 1-month (30-day) persistent session retention (SQLite-backed) across server restarts and browser sessions.
 - **Drive Version Locking**: Verifies `headRevisionId` before updating to prevent race conditions when multiple faculty update sheets concurrently.
