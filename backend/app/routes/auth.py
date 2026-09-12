@@ -21,15 +21,13 @@ async def google_login():
     Initiates Google OAuth 2.0 flow.
     """
     if not settings.GOOGLE_CLIENT_ID:
-        if settings.DEV_MODE:
-            return {"auth_url": None, "dev_mode": True, "message": "Google Client ID not configured. Use /api/auth/mock-login in dev mode."}
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Google OAuth credentials are not configured on the server."
         )
     state = secrets.token_urlsafe(16)
     auth_url = get_google_auth_url(state)
-    return {"auth_url": auth_url, "dev_mode": settings.DEV_MODE}
+    return {"auth_url": auth_url}
 
 @router.get("/google/callback")
 async def google_callback(code: str, response: Response):
@@ -62,53 +60,6 @@ async def google_callback(code: str, response: Response):
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/login?error=oauth_failed&msg={str(e)}"
         )
-
-@router.post("/mock-login")
-async def mock_login(response: Response):
-    """
-    Development endpoint to login as test faculty with @ssn.edu.in account.
-    """
-    if not settings.DEV_MODE:
-        raise HTTPException(status_code=403, detail="Mock login only permitted in DEV_MODE.")
-        
-    mock_user = {
-        "id": "faculty_dev_1",
-        "email": "faculty@ssn.edu.in",
-        "name": "Faculty Instructor",
-        "picture": "https://api.dicebear.com/7.x/avataaars/svg?seed=ssn",
-        "hd": "ssn.edu.in",
-        "access_token": None,
-        "is_authorized": True,
-        "selected_folder_id": "local_attendance_folder",
-        "selected_folder_name": "📁 College Attendance Folder (Local Dev)",
-        "selected_file_id": None,
-        "selected_file_name": None
-    }
-    session_token = create_session_token(mock_user)
-    session_max_age = settings.SESSION_EXPIRE_HOURS * 3600
-    
-    response.set_cookie(
-        key=settings.SESSION_COOKIE_NAME,
-        value=session_token,
-        httponly=True,
-        secure=False,
-        samesite="lax",
-        max_age=session_max_age,
-        expires=session_max_age
-    )
-    
-    return {
-        "success": True,
-        "user": UserProfile(
-            id=mock_user["id"],
-            email=mock_user["email"],
-            name=mock_user["name"],
-            picture=mock_user["picture"],
-            hd=mock_user["hd"],
-            is_authorized=True
-        ),
-        "token": session_token
-    }
 
 @router.get("/me")
 async def get_me(request: Request, response: Response, user: dict = Depends(get_current_user)):

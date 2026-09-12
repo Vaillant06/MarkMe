@@ -1,6 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from app.config import settings
+from app.auth.session import create_session_token
 
 client = TestClient(app)
 
@@ -9,17 +11,32 @@ def test_health_check():
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
 
+def test_mock_login_endpoint_removed():
+    """Verify mock-login demo endpoint is completely removed (returns 404)."""
+    response = client.post("/api/auth/mock-login")
+    assert response.status_code == 404
+
 def test_unauthenticated_access_denied():
     response = client.get("/api/drive/folders")
     assert response.status_code == 401
 
 def test_complete_api_flow():
-    # 1. Login with dev mock
-    login_res = client.post("/api/auth/mock-login")
-    assert login_res.status_code == 200
-    user_data = login_res.json()["user"]
-    assert user_data["email"] == "faculty@ssn.edu.in"
-    assert user_data["is_authorized"] is True
+    # 1. Authenticate session directly
+    test_user = {
+        "id": "faculty_dev_1",
+        "email": "faculty@ssn.edu.in",
+        "name": "Faculty Instructor",
+        "picture": "https://api.dicebear.com/7.x/avataaars/svg?seed=ssn",
+        "hd": "ssn.edu.in",
+        "access_token": None,
+        "is_authorized": True,
+        "selected_folder_id": "local_attendance_folder",
+        "selected_folder_name": "📁 College Attendance Folder (Local Dev)",
+        "selected_file_id": None,
+        "selected_file_name": None
+    }
+    token = create_session_token(test_user)
+    client.cookies.set(settings.SESSION_COOKIE_NAME, token)
 
     # 2. Get Me
     me_res = client.get("/api/auth/me")

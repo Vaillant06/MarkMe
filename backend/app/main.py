@@ -39,6 +39,5 @@ def health_check():
     return {
         "status": "healthy",
         "app": settings.APP_NAME,
-        "authorized_domain": settings.AUTHORIZED_DOMAIN,
-        "dev_mode": settings.DEV_MODE
+        "authorized_domain": settings.AUTHORIZED_DOMAIN
     }

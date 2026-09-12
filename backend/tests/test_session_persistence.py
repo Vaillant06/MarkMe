@@ -64,22 +64,39 @@ def test_session_lifecycle_and_db_persistence():
     # Should no longer be retrievable
     assert verify_session_token(token) is None
 
+def make_test_auth_token():
+    test_user = {
+        "id": "faculty_dev_1",
+        "email": "faculty@ssn.edu.in",
+        "name": "Faculty Instructor",
+        "picture": "https://api.dicebear.com/7.x/avataaars/svg?seed=ssn",
+        "hd": "ssn.edu.in",
+        "access_token": None,
+        "is_authorized": True,
+        "selected_folder_id": "local_attendance_folder",
+        "selected_folder_name": "📁 College Attendance Folder (Local Dev)",
+        "selected_file_id": None,
+        "selected_file_name": None
+    }
+    return create_session_token(test_user)
+
 def test_api_cookie_and_restart_flow():
     """Verify API endpoints set 1-month cookie and survive server restarts."""
-    # 1. Mock Login
-    login_res = client.post("/api/auth/mock-login")
-    assert login_res.status_code == 200
-    token = login_res.json()["token"]
+    # 1. Establish session token
+    token = make_test_auth_token()
     assert token is not None
 
-    # Verify cookie Max-Age is 30 days (2,592,000 seconds)
-    cookie_header = login_res.headers.get("set-cookie", "")
-    assert f"Max-Age={settings.SESSION_EXPIRE_HOURS * 3600}" in cookie_header or f"max-age={settings.SESSION_EXPIRE_HOURS * 3600}" in cookie_header.lower()
+    # Set session cookie on test client
+    client.cookies.set(settings.SESSION_COOKIE_NAME, token)
 
     # 2. Access /api/auth/me
     me_res = client.get("/api/auth/me")
     assert me_res.status_code == 200
     assert me_res.json()["user"]["email"] == "faculty@ssn.edu.in"
+
+    # Verify cookie Max-Age is refreshed to 30 days (2,592,000 seconds)
+    cookie_header = me_res.headers.get("set-cookie", "")
+    assert f"Max-Age={settings.SESSION_EXPIRE_HOURS * 3600}" in cookie_header or f"max-age={settings.SESSION_EXPIRE_HOURS * 3600}" in cookie_header.lower()
 
     # 3. Simulate server restart
     _session_store.clear()
@@ -105,9 +122,7 @@ def test_api_cookie_and_restart_flow():
 
 def test_workbook_selection_persistence_and_restart():
     """Verify selecting a workbook persists in session and survives server restarts."""
-    login_res = client.post("/api/auth/mock-login")
-    assert login_res.status_code == 200
-    token = login_res.json()["token"]
+    token = make_test_auth_token()
     headers = {"Authorization": f"Bearer {token}"}
 
     # Select workbook via API
@@ -143,8 +158,7 @@ def test_workbook_selection_persistence_and_restart():
 
 def test_folder_disconnect_clears_workbook():
     """Verify disconnecting active folder also clears any selected workbook."""
-    login_res = client.post("/api/auth/mock-login")
-    token = login_res.json()["token"]
+    token = make_test_auth_token()
     headers = {"Authorization": f"Bearer {token}"}
 
     # Set workbook
@@ -165,8 +179,7 @@ def test_folder_disconnect_clears_workbook():
 
 def test_inaccessible_workbook_returns_404():
     """Verify attempting to get details for nonexistent workbook returns 404."""
-    login_res = client.post("/api/auth/mock-login")
-    token = login_res.json()["token"]
+    token = make_test_auth_token()
     headers = {"Authorization": f"Bearer {token}"}
 
     res = client.get("/api/workbooks/non_existent_file_9999/details", headers=headers)
