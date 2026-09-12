@@ -47,8 +47,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   // Auth
-  getGoogleLoginUrl: () => request<{ auth_url: string | null; dev_mode: boolean; message?: string }>('/auth/google/login'),
-  mockLogin: () => request<{ success: boolean; user: UserProfile; token: string }>('/auth/mock-login', { method: 'POST' }),
+  getGoogleLoginUrl: () => request<{ auth_url: string | null; message?: string }>('/auth/google/login'),
   getCurrentUser: () =>
     request<{
       user: UserProfile;
