@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
+import { ShieldCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { api } from '../api/client';
 import { UserProfile } from '../types';
 
@@ -7,10 +7,9 @@ interface LoginPageProps {
   onLoginSuccess: (user: UserProfile) => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
+export const LoginPage: React.FC<LoginPageProps> = () => {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [devMode, setDevMode] = useState(false);
 
   useEffect(() => {
     // Check URL parameters for OAuth errors
@@ -22,13 +21,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     } else if (error) {
       setErrorMessage(msg || 'Authentication failed. Please try again.');
     }
-
-    // Check dev mode availability
-    api.getGoogleLoginUrl().then((res) => {
-      if (res.dev_mode) {
-        setDevMode(true);
-      }
-    }).catch(() => {});
   }, []);
 
   const handleGoogleSignIn = async () => {
@@ -38,31 +30,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       const res = await api.getGoogleLoginUrl();
       if (res.auth_url) {
         window.location.href = res.auth_url;
-      } else if (res.dev_mode) {
-        // Fallback to dev mock login
-        const loginRes = await api.mockLogin();
-        if (loginRes.token) {
-          localStorage.setItem('markme_token', loginRes.token);
-        }
-        onLoginSuccess(loginRes.user);
+      } else {
+        setErrorMessage(res.message || 'Google OAuth is not configured on the server.');
+        setLoading(false);
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to initiate Google login.');
-      setLoading(false);
-    }
-  };
-
-  const handleDevMockLogin = async () => {
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      const loginRes = await api.mockLogin();
-      if (loginRes.token) {
-        localStorage.setItem('markme_token', loginRes.token);
-      }
-      onLoginSuccess(loginRes.user);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Mock login failed.');
       setLoading(false);
     }
   };
@@ -72,7 +45,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
         {/* Institutional Branding Top */}
         <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-8 text-center text-white relative">
-          <div className="w-36 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-900/50">
+          <div className="w-48 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-900/50">
+            <CheckCircle2 className="w-8 h-8 mx-2 text-blue-200 flex-shrink-0" />
             <span className="text-3xl font-extrabold text-white">MarkMe</span>
           </div>
           <h1 className="text-sm font-semibold tracking-widest uppercase text-blue-300">
@@ -122,17 +96,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </svg>
               <span>{loading ? 'Connecting...' : 'Sign in with Google'}</span>
             </button>
-
-            {devMode && (
-              <button
-                onClick={handleDevMockLogin}
-                disabled={loading}
-                className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-800 font-medium text-xs transition"
-              >
-                <Sparkles className="w-4 h-4 text-blue-600" />
-                <span>Quick Sign In: faculty@ssn.edu.in (Dev Mode)</span>
-              </button>
-            )}
           </div>
 
           <div className="pt-2 border-t border-slate-100 text-center space-y-1">
