@@ -32,6 +32,10 @@ class FolderResolveRequest(BaseModel):
 class FolderRemoveRequest(BaseModel):
     folder_id: str
 
+class WorkbookSelectRequest(BaseModel):
+    file_id: str
+    file_name: Optional[str] = None
+
 class StudentInfo(BaseModel):
     sno: int
     digital_id: str

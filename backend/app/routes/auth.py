@@ -80,7 +80,9 @@ async def mock_login(response: Response):
         "access_token": None,
         "is_authorized": True,
         "selected_folder_id": "local_attendance_folder",
-        "selected_folder_name": "📁 College Attendance Folder (Local Dev)"
+        "selected_folder_name": "📁 College Attendance Folder (Local Dev)",
+        "selected_file_id": None,
+        "selected_file_name": None
     }
     session_token = create_session_token(mock_user)
     session_max_age = settings.SESSION_EXPIRE_HOURS * 3600
@@ -141,7 +143,9 @@ async def get_me(request: Request, response: Response, user: dict = Depends(get_
             is_authorized=user.get("is_authorized", False)
         ),
         "selected_folder_id": user.get("selected_folder_id"),
-        "selected_folder_name": user.get("selected_folder_name")
+        "selected_folder_name": user.get("selected_folder_name"),
+        "selected_file_id": user.get("selected_file_id"),
+        "selected_file_name": user.get("selected_file_name")
     }
 
 @router.post("/logout")

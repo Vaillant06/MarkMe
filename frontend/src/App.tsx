@@ -7,6 +7,15 @@ import { AttendanceMarkingPage } from './pages/AttendanceMarkingPage';
 import { SuccessView } from './components/SuccessView';
 import { api } from './api/client';
 import { UserProfile, DriveFile, AttendanceCommitResponse } from './types';
+import {
+  AppStage,
+  STORAGE_KEYS,
+  getPersistedWorkflowState,
+  setPersistedWorkflowState,
+  clearAllWorkflowState,
+  parseUrlNavigation,
+  navigateToStage,
+} from './utils/workflowState';
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -16,37 +25,183 @@ export const App: React.FC = () => {
   const [commitResult, setCommitResult] = useState<AttendanceCommitResponse | null>(null);
 
   // App Navigation Stage: 'AUTH' | 'DRIVE_SETUP' | 'FILE_SELECT' | 'MARK_ATTENDANCE' | 'SUCCESS'
-  const [stage, setStage] = useState<'AUTH' | 'DRIVE_SETUP' | 'FILE_SELECT' | 'MARK_ATTENDANCE' | 'SUCCESS'>('AUTH');
+  const [stage, setStage] = useState<AppStage>('AUTH');
   const [initialLoading, setInitialLoading] = useState(true);
+  const [workflowNotice, setWorkflowNotice] = useState<string | null>(null);
 
   useEffect(() => {
     // Check if redirected with OAuth session token in URL
     const params = new URLSearchParams(window.location.search);
     const tokenFromUrl = params.get('token');
     if (tokenFromUrl) {
-      localStorage.setItem('markme_token', tokenFromUrl);
-      // Clean query parameters from URL in address bar without reloading
-      const cleanUrl = window.location.pathname;
+      localStorage.setItem(STORAGE_KEYS.TOKEN, tokenFromUrl);
+      // Clean query parameter from URL in address bar without full reload
+      params.delete('token');
+      const remainingSearch = params.toString();
+      const cleanUrl = remainingSearch
+        ? `${window.location.pathname}?${remainingSearch}`
+        : window.location.pathname;
       window.history.replaceState({}, document.title, cleanUrl);
     }
+
+    // Listen to browser Back / Forward events
+    const handlePopState = async () => {
+      const nav = parseUrlNavigation();
+      if (nav.stageFromUrl === 'MARK_ATTENDANCE') {
+        const fileId = nav.fileId || localStorage.getItem(STORAGE_KEYS.FILE_ID);
+        if (fileId) {
+          if (selectedFile && selectedFile.id === fileId) {
+            setStage('MARK_ATTENDANCE');
+          } else {
+            try {
+              const wb = await api.getWorkbookDetails(fileId);
+              const restoredFile: DriveFile = {
+                id: fileId,
+                name: wb.file_name,
+                mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              };
+              setSelectedFile(restoredFile);
+              setStage('MARK_ATTENDANCE');
+              setPersistedWorkflowState({ step: 'MARK_ATTENDANCE', fileId });
+            } catch {
+              setStage('FILE_SELECT');
+              navigateToStage('FILE_SELECT', {}, true);
+            }
+          }
+        } else {
+          setStage('FILE_SELECT');
+          navigateToStage('FILE_SELECT', {}, true);
+        }
+      } else if (nav.stageFromUrl === 'FILE_SELECT') {
+        setStage('FILE_SELECT');
+        setPersistedWorkflowState({ step: 'FILE_SELECT' });
+      } else if (nav.stageFromUrl === 'DRIVE_SETUP') {
+        setStage('DRIVE_SETUP');
+        setPersistedWorkflowState({ step: 'DRIVE_SETUP' });
+      } else if (nav.stageFromUrl === 'AUTH') {
+        setStage('AUTH');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
     checkCurrentUser();
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
   const checkCurrentUser = async () => {
+    setInitialLoading(true);
+    setWorkflowNotice(null);
     try {
+      // 1. Validate session with backend (Requirement 10)
       const data = await api.getCurrentUser();
       setUser(data.user);
-      setSelectedFolderId(data.selected_folder_id);
-      setSelectedFolderName(data.selected_folder_name);
 
-      if (data.selected_folder_id) {
-        setStage('FILE_SELECT');
-      } else {
-        setStage('DRIVE_SETUP');
+      // 2. Determine effective folder
+      const persisted = getPersistedWorkflowState();
+      const effectiveFolderId =
+        data.selected_folder_id || persisted.folderId || undefined;
+      const effectiveFolderName =
+        data.selected_folder_name || persisted.folderName || undefined;
+
+      if (effectiveFolderId) {
+        setSelectedFolderId(effectiveFolderId);
+        setPersistedWorkflowState({ folderId: effectiveFolderId });
       }
+      if (effectiveFolderName) {
+        setSelectedFolderName(effectiveFolderName);
+        setPersistedWorkflowState({ folderName: effectiveFolderName });
+      }
+
+      // 3. Reconstruct workflow from URL and/or persisted state (Requirement 4, 6, 8, 9)
+      const nav = parseUrlNavigation();
+      const targetStep = nav.stageFromUrl || persisted.step;
+      const targetFileId = nav.fileId || data.selected_file_id || persisted.fileId;
+
+      // Handle Step 3 (Mark Attendance)
+      const wantsAttendance =
+        nav.stageFromUrl === 'MARK_ATTENDANCE' ||
+        targetStep === 'MARK_ATTENDANCE' ||
+        Boolean(nav.fileId);
+
+      if (wantsAttendance && targetFileId) {
+        try {
+          // Verify and retrieve fresh workbook details from backend/Drive
+          const wb = await api.getWorkbookDetails(targetFileId);
+          const restoredFile: DriveFile = {
+            id: targetFileId,
+            name:
+              wb.file_name ||
+              data.selected_file_name ||
+              persisted.fileName ||
+              'Attendance Sheet.xlsx',
+            mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          };
+          setSelectedFile(restoredFile);
+          setPersistedWorkflowState({
+            step: 'MARK_ATTENDANCE',
+            fileId: targetFileId,
+            fileName: restoredFile.name,
+          });
+          setStage('MARK_ATTENDANCE');
+          navigateToStage('MARK_ATTENDANCE', { fileId: targetFileId }, true);
+          return;
+        } catch (err: any) {
+          // Requirement 7: Gracefully handle inaccessible or deleted workbook
+          console.warn('Persisted workbook inaccessible or deleted:', err);
+          setPersistedWorkflowState({ fileId: null, fileName: null });
+          try {
+            await api.clearWorkbook();
+          } catch {}
+          setWorkflowNotice(
+            err.status === 404
+              ? 'The previously selected workbook is no longer accessible or was deleted. Please select an attendance workbook.'
+              : 'Unable to access the previously selected workbook. Please select an attendance workbook.'
+          );
+          setSelectedFile(null);
+
+          if (effectiveFolderId) {
+            setStage('FILE_SELECT');
+            setPersistedWorkflowState({ step: 'FILE_SELECT' });
+            navigateToStage('FILE_SELECT', { folderId: effectiveFolderId }, true);
+          } else {
+            setStage('DRIVE_SETUP');
+            setPersistedWorkflowState({ step: 'DRIVE_SETUP' });
+            navigateToStage('DRIVE_SETUP', {}, true);
+          }
+          return;
+        }
+      }
+
+      // Handle Step 1 (Drive Setup) explicitly when requested (Requirement 8)
+      const wantsDriveSetup =
+        nav.stageFromUrl === 'DRIVE_SETUP' ||
+        targetStep === 'DRIVE_SETUP' ||
+        !effectiveFolderId;
+
+      if (wantsDriveSetup) {
+        setStage('DRIVE_SETUP');
+        setPersistedWorkflowState({ step: 'DRIVE_SETUP' });
+        navigateToStage('DRIVE_SETUP', effectiveFolderId ? { folderId: effectiveFolderId } : undefined, true);
+        return;
+      }
+
+      // Handle Step 2 (Workbook Selection)
+      setStage('FILE_SELECT');
+      setPersistedWorkflowState({ step: 'FILE_SELECT' });
+      navigateToStage('FILE_SELECT', { folderId: effectiveFolderId }, true);
     } catch {
+      // Backend rejected authentication or token expired
+      clearAllWorkflowState();
       setUser(null);
+      setSelectedFolderId(undefined);
+      setSelectedFolderName(undefined);
+      setSelectedFile(null);
+      setCommitResult(null);
       setStage('AUTH');
+      navigateToStage('AUTH', {}, true);
     } finally {
       setInitialLoading(false);
     }
@@ -56,39 +211,86 @@ export const App: React.FC = () => {
     try {
       await api.logout();
     } catch {}
-    localStorage.removeItem('markme_token');
+    // Requirement 11: Clear all application workflow state on logout
+    clearAllWorkflowState();
     setUser(null);
     setSelectedFolderId(undefined);
     setSelectedFolderName(undefined);
     setSelectedFile(null);
     setCommitResult(null);
+    setWorkflowNotice(null);
     setStage('AUTH');
+    navigateToStage('AUTH', {}, true);
   };
 
   const handleLoginSuccess = (loggedInUser: UserProfile) => {
     setUser(loggedInUser);
-    setStage('DRIVE_SETUP');
+    setWorkflowNotice(null);
+    const persisted = getPersistedWorkflowState();
+    if (persisted.folderId || selectedFolderId) {
+      setStage('FILE_SELECT');
+      setPersistedWorkflowState({ step: 'FILE_SELECT' });
+      navigateToStage('FILE_SELECT', { folderId: persisted.folderId || selectedFolderId });
+    } else {
+      setStage('DRIVE_SETUP');
+      setPersistedWorkflowState({ step: 'DRIVE_SETUP' });
+      navigateToStage('DRIVE_SETUP');
+    }
   };
 
   const handleFolderSelected = (folderId: string, folderName: string) => {
     setSelectedFolderId(folderId);
     setSelectedFolderName(folderName);
+    setSelectedFile(null);
+    setWorkflowNotice(null);
+    setPersistedWorkflowState({
+      folderId,
+      folderName,
+      fileId: null,
+      fileName: null,
+      step: 'FILE_SELECT',
+    });
     setStage('FILE_SELECT');
+    navigateToStage('FILE_SELECT', { folderId });
   };
 
   const handleFileSelected = (file: DriveFile) => {
     setSelectedFile(file);
+    setWorkflowNotice(null);
+    setPersistedWorkflowState({
+      fileId: file.id,
+      fileName: file.name,
+      step: 'MARK_ATTENDANCE',
+    });
+    api.selectWorkbook(file.id, file.name).catch(() => {});
     setStage('MARK_ATTENDANCE');
+    navigateToStage('MARK_ATTENDANCE', { fileId: file.id });
+  };
+
+  const handleBackToFileSelect = () => {
+    setPersistedWorkflowState({ step: 'FILE_SELECT' });
+    setStage('FILE_SELECT');
+    navigateToStage('FILE_SELECT', { folderId: selectedFolderId });
+  };
+
+  const handleBackToDriveSetup = () => {
+    setPersistedWorkflowState({ step: 'DRIVE_SETUP' });
+    setStage('DRIVE_SETUP');
+    navigateToStage('DRIVE_SETUP');
   };
 
   const handleCommitSuccess = (res: AttendanceCommitResponse) => {
     setCommitResult(res);
+    setPersistedWorkflowState({ step: 'SUCCESS' });
     setStage('SUCCESS');
+    navigateToStage('SUCCESS', { fileId: selectedFile?.id });
   };
 
   const handleResetForAnotherSession = () => {
     setCommitResult(null);
+    setPersistedWorkflowState({ step: 'MARK_ATTENDANCE' });
     setStage('MARK_ATTENDANCE');
+    navigateToStage('MARK_ATTENDANCE', { fileId: selectedFile?.id });
   };
 
   if (initialLoading) {
@@ -120,6 +322,14 @@ export const App: React.FC = () => {
             onFolderDisconnected={() => {
               setSelectedFolderId(undefined);
               setSelectedFolderName(undefined);
+              setSelectedFile(null);
+              setPersistedWorkflowState({
+                folderId: null,
+                folderName: null,
+                fileId: null,
+                fileName: null,
+                step: 'DRIVE_SETUP',
+              });
             }}
           />
         )}
@@ -127,15 +337,17 @@ export const App: React.FC = () => {
         {stage === 'FILE_SELECT' && (
           <FileSelectionPage
             folderName={selectedFolderName || 'College Attendance Folder'}
-            onBackToDriveSetup={() => setStage('DRIVE_SETUP')}
+            onBackToDriveSetup={handleBackToDriveSetup}
             onFileSelected={handleFileSelected}
+            notice={workflowNotice}
+            initialSelectedFileId={selectedFile?.id || getPersistedWorkflowState().fileId}
           />
         )}
 
         {stage === 'MARK_ATTENDANCE' && selectedFile && (
           <AttendanceMarkingPage
             file={selectedFile}
-            onBackToFileSelect={() => setStage('FILE_SELECT')}
+            onBackToFileSelect={handleBackToFileSelect}
             onCommitSuccess={handleCommitSuccess}
           />
         )}

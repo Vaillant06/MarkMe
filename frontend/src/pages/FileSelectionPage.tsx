@@ -7,17 +7,21 @@ interface FileSelectionPageProps {
   folderName: string;
   onBackToDriveSetup: () => void;
   onFileSelected: (file: DriveFile) => void;
+  notice?: string | null;
+  initialSelectedFileId?: string | null;
 }
 
 export const FileSelectionPage: React.FC<FileSelectionPageProps> = ({
   folderName,
   onBackToDriveSetup,
   onFileSelected,
+  notice,
+  initialSelectedFileId,
 }) => {
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedFileId, setSelectedFileId] = useState<string>('');
+  const [selectedFileId, setSelectedFileId] = useState<string>(initialSelectedFileId || '');
 
   useEffect(() => {
     loadFiles();
@@ -30,7 +34,10 @@ export const FileSelectionPage: React.FC<FileSelectionPageProps> = ({
       const data = await api.listFiles();
       setFiles(data);
       if (data.length > 0) {
-        setSelectedFileId(data[0].id);
+        const preferredId = initialSelectedFileId && data.some((f) => f.id === initialSelectedFileId)
+          ? initialSelectedFileId
+          : data[0].id;
+        setSelectedFileId(preferredId);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to list Excel files from Drive folder.');
@@ -63,6 +70,16 @@ export const FileSelectionPage: React.FC<FileSelectionPageProps> = ({
             Folder: <span className="font-semibold text-white">{folderName}</span>
           </p>
         </div>
+
+        {notice && (
+          <div className="mx-8 mt-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start space-x-3">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
+            <div>
+              <p className="font-semibold">Notice</p>
+              <p className="mt-0.5">{notice}</p>
+            </div>
+          </div>
+        )}
 
         <div className="p-8 space-y-6">
           {error && (

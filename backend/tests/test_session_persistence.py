@@ -102,3 +102,73 @@ def test_api_cookie_and_restart_flow():
 
     # Access after logout should fail
     assert client.get("/api/auth/me").status_code == 401
+
+def test_workbook_selection_persistence_and_restart():
+    """Verify selecting a workbook persists in session and survives server restarts."""
+    login_res = client.post("/api/auth/mock-login")
+    assert login_res.status_code == 200
+    token = login_res.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Select workbook via API
+    sel_res = client.post(
+        "/api/workbooks/select",
+        json={"file_id": "test_wb_file_123", "file_name": "Test_Workbook.xlsx"},
+        headers=headers
+    )
+    assert sel_res.status_code == 200
+    assert sel_res.json()["file_id"] == "test_wb_file_123"
+
+    # Verify in /api/auth/me
+    me_res = client.get("/api/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    assert me_res.json()["selected_file_id"] == "test_wb_file_123"
+    assert me_res.json()["selected_file_name"] == "Test_Workbook.xlsx"
+
+    # Simulate server restart
+    _session_store.clear()
+
+    # Verify state survived restart from SQLite DB
+    me_after = client.get("/api/auth/me", headers=headers)
+    assert me_after.status_code == 200
+    assert me_after.json()["selected_file_id"] == "test_wb_file_123"
+    assert me_after.json()["selected_file_name"] == "Test_Workbook.xlsx"
+
+    # Clear workbook
+    clear_res = client.post("/api/workbooks/clear", headers=headers)
+    assert clear_res.status_code == 200
+
+    me_cleared = client.get("/api/auth/me", headers=headers)
+    assert me_cleared.json()["selected_file_id"] is None
+
+def test_folder_disconnect_clears_workbook():
+    """Verify disconnecting active folder also clears any selected workbook."""
+    login_res = client.post("/api/auth/mock-login")
+    token = login_res.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Set workbook
+    client.post(
+        "/api/workbooks/select",
+        json={"file_id": "wb_to_be_cleared", "file_name": "WB.xlsx"},
+        headers=headers
+    )
+
+    # Disconnect active folder
+    disc_res = client.post("/api/drive/folders/disconnect", headers=headers)
+    assert disc_res.status_code == 200
+
+    # Verify both folder and file are cleared in session
+    me_res = client.get("/api/auth/me", headers=headers)
+    assert me_res.json()["selected_folder_id"] is None
+    assert me_res.json()["selected_file_id"] is None
+
+def test_inaccessible_workbook_returns_404():
+    """Verify attempting to get details for nonexistent workbook returns 404."""
+    login_res = client.post("/api/auth/mock-login")
+    token = login_res.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    res = client.get("/api/workbooks/non_existent_file_9999/details", headers=headers)
+    assert res.status_code == 404
+    assert "not found" in res.json()["detail"].lower()

@@ -78,6 +78,8 @@ async def remove_folder(req: FolderRemoveRequest, user: dict = Depends(get_curre
     if user.get("selected_folder_id") == req.folder_id:
         updates["selected_folder_id"] = None
         updates["selected_folder_name"] = None
+        updates["selected_file_id"] = None
+        updates["selected_file_name"] = None
 
     update_session_data(user_id, updates)
     return {"success": True, "removed_id": req.folder_id}
@@ -99,7 +101,9 @@ async def disconnect_active_folder(user: dict = Depends(get_current_user)):
     user_id = user.get("id") or user.get("email")
     update_session_data(user_id, {
         "selected_folder_id": None,
-        "selected_folder_name": None
+        "selected_folder_name": None,
+        "selected_file_id": None,
+        "selected_file_name": None
     })
     return {"success": True, "message": "Active folder disconnected."}
 

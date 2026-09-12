@@ -18,6 +18,11 @@ import {
 } from '../types';
 import { AttendancePreviewModal } from '../components/AttendancePreviewModal';
 import { DuplicateWarningModal } from '../components/DuplicateWarningModal';
+import {
+  getAttendanceDraft,
+  saveAttendanceDraft,
+  clearAttendanceDraft,
+} from '../utils/workflowState';
 
 interface AttendanceMarkingPageProps {
   file: DriveFile;
@@ -34,9 +39,12 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Form Fields
-  const [selectedSheet, setSelectedSheet] = useState<string>('');
+  const draft = useMemo(() => getAttendanceDraft(file.id), [file.id]);
+
+  // Form Fields - restored from draft if present
+  const [selectedSheet, setSelectedSheet] = useState<string>(() => draft?.selectedSheet || '');
   const [date, setDate] = useState<string>(() => {
+    if (draft?.date) return draft.date;
     const today = new Date();
     // Default to 2026-09-10 or current date
     const y = today.getFullYear();
@@ -44,9 +52,11 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
     const d = String(today.getDate()).padStart(2, '0');
     return `${d}/${m}/${y}`;
   });
-  const [period, setPeriod] = useState<string>('3');
-  const [entryMode, setEntryMode] = useState<'ABSENT' | 'PRESENT'>('ABSENT');
-  const [studentInput, setStudentInput] = useState<string>('067, 080, 114, 129');
+  const [period, setPeriod] = useState<string>(() => draft?.period || '3');
+  const [entryMode, setEntryMode] = useState<'ABSENT' | 'PRESENT'>(() => draft?.entryMode || 'ABSENT');
+  const [studentInput, setStudentInput] = useState<string>(() =>
+    draft?.studentInput !== undefined ? draft.studentInput : '067, 080, 114, 129'
+  );
 
   // Preview & Commit States
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -62,6 +72,17 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
     loadWorkbook();
   }, [file.id]);
 
+  // Persist form inputs on every change to retain across reloads
+  useEffect(() => {
+    saveAttendanceDraft(file.id, {
+      selectedSheet,
+      date,
+      period,
+      entryMode,
+      studentInput,
+    });
+  }, [file.id, selectedSheet, date, period, entryMode, studentInput]);
+
   const loadWorkbook = async () => {
     setLoading(true);
     setLoadError(null);
@@ -69,9 +90,15 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
       const data = await api.getWorkbookDetails(file.id);
       setDetails(data);
       if (data.subjects.length > 0) {
-        // Default to UIT3562 if available, or first subject
-        const defaultSub = data.subjects.find((s) => s.code === 'UIT3562') || data.subjects[0];
-        setSelectedSheet(defaultSub.sheet_name);
+        // Restore selected sheet from draft if valid, otherwise default to UIT3562 or first
+        const savedSheet = draft?.selectedSheet || selectedSheet;
+        const matchingSubject = savedSheet && data.subjects.find((s) => s.sheet_name === savedSheet);
+        if (matchingSubject) {
+          setSelectedSheet(matchingSubject.sheet_name);
+        } else {
+          const defaultSub = data.subjects.find((s) => s.code === 'UIT3562') || data.subjects[0];
+          setSelectedSheet(defaultSub.sheet_name);
+        }
       }
     } catch (err: any) {
       setLoadError(err.message || 'Failed to load workbook details.');
@@ -159,6 +186,7 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
 
       setIsPreviewOpen(false);
       setIsDuplicateModalOpen(false);
+      clearAttendanceDraft(file.id);
       onCommitSuccess(commitRes);
     } catch (err: any) {
       alert(`Commit error: ${err.message}`);

@@ -49,7 +49,14 @@ export const api = {
   // Auth
   getGoogleLoginUrl: () => request<{ auth_url: string | null; dev_mode: boolean; message?: string }>('/auth/google/login'),
   mockLogin: () => request<{ success: boolean; user: UserProfile; token: string }>('/auth/mock-login', { method: 'POST' }),
-  getCurrentUser: () => request<{ user: UserProfile; selected_folder_id?: string; selected_folder_name?: string }>('/auth/me'),
+  getCurrentUser: () =>
+    request<{
+      user: UserProfile;
+      selected_folder_id?: string;
+      selected_folder_name?: string;
+      selected_file_id?: string;
+      selected_file_name?: string;
+    }>('/auth/me'),
   logout: () => request<{ success: boolean; message: string }>('/auth/logout', { method: 'POST' }),
 
   // Drive
@@ -81,6 +88,15 @@ export const api = {
 
   // Workbooks
   getWorkbookDetails: (file_id: string) => request<WorkbookDetails>(`/workbooks/${file_id}/details`),
+  selectWorkbook: (file_id: string, file_name?: string) =>
+    request<{ success: boolean; file_id: string; file_name?: string }>('/workbooks/select', {
+      method: 'POST',
+      body: JSON.stringify({ file_id, file_name }),
+    }),
+  clearWorkbook: () =>
+    request<{ success: boolean; message: string }>('/workbooks/clear', {
+      method: 'POST',
+    }),
 
   // Attendance
   generatePreview: (params: {

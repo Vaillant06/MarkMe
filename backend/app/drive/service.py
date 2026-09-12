@@ -293,13 +293,16 @@ class DriveService:
             return content, os.path.basename(fpath), rev_id
 
         # 2. Default local dev file
-        if not self.access_token or file_id.startswith("local"):
+        if file_id.startswith("local") or file_id == "default_dev_workbook":
             ref_path = settings.DEV_LOCAL_WORKBOOK_PATH
             if not os.path.exists(ref_path):
                 raise FileNotFoundError(f"Local file not found: {ref_path}")
             with open(ref_path, "rb") as f:
                 content = f.read()
             return content, "V Sem B Attendance sheet.xlsx", "rev-local-1"
+
+        if not self.access_token:
+            raise FileNotFoundError(f"Workbook with ID '{file_id}' not found.")
 
         # 3. Google Drive file
         service = self._get_service()
