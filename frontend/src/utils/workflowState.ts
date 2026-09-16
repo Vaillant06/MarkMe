@@ -1,4 +1,4 @@
-export type AppStage = 'AUTH' | 'DRIVE_SETUP' | 'FILE_SELECT' | 'MARK_ATTENDANCE' | 'SUCCESS';
+export type AppStage = 'AUTH' | 'DRIVE_SETUP' | 'FILE_SELECT' | 'MARK_ATTENDANCE' | 'STATISTICS' | 'SUCCESS';
 
 export const STORAGE_KEYS = {
   TOKEN: 'markme_token',
@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   FOLDER_NAME: 'markme_selected_folder_name',
   FILE_ID: 'markme_selected_file_id',
   FILE_NAME: 'markme_selected_file_name',
+  SUBJECT: 'markme_selected_subject',
   DRAFT_PREFIX: 'markme_draft_',
 } as const;
 
@@ -45,6 +46,7 @@ export function getPersistedWorkflowState(): {
   folderName: string | null;
   fileId: string | null;
   fileName: string | null;
+  subject: string | null;
 } {
   return {
     step: (localStorage.getItem(STORAGE_KEYS.CURRENT_STEP) as AppStage) || null,
@@ -52,6 +54,7 @@ export function getPersistedWorkflowState(): {
     folderName: localStorage.getItem(STORAGE_KEYS.FOLDER_NAME),
     fileId: localStorage.getItem(STORAGE_KEYS.FILE_ID),
     fileName: localStorage.getItem(STORAGE_KEYS.FILE_NAME),
+    subject: localStorage.getItem(STORAGE_KEYS.SUBJECT),
   };
 }
 
@@ -61,6 +64,7 @@ export function setPersistedWorkflowState(updates: {
   folderName?: string | null;
   fileId?: string | null;
   fileName?: string | null;
+  subject?: string | null;
 }): void {
   try {
     if (updates.step !== undefined) {
@@ -98,6 +102,13 @@ export function setPersistedWorkflowState(updates: {
         localStorage.setItem(STORAGE_KEYS.FILE_NAME, updates.fileName);
       }
     }
+    if (updates.subject !== undefined) {
+      if (updates.subject === null) {
+        localStorage.removeItem(STORAGE_KEYS.SUBJECT);
+      } else {
+        localStorage.setItem(STORAGE_KEYS.SUBJECT, updates.subject);
+      }
+    }
   } catch {}
 }
 
@@ -122,16 +133,20 @@ export function parseUrlNavigation(): {
   fileId: string | null;
   folderId: string | null;
   stepParam: string | null;
+  subject: string | null;
 } {
   const path = window.location.pathname;
   const params = new URLSearchParams(window.location.search);
   const fileId = params.get('fileId');
   const folderId = params.get('folderId');
   const stepParam = params.get('step');
+  const subject = params.get('subject');
 
   let stageFromUrl: AppStage | null = null;
 
-  if (path.startsWith('/attendance') || stepParam === 'attendance' || (fileId && !path.startsWith('/files') && !path.startsWith('/drive-setup'))) {
+  if (path.startsWith('/statistics') || stepParam === 'statistics') {
+    stageFromUrl = 'STATISTICS';
+  } else if (path.startsWith('/attendance') || stepParam === 'attendance' || (fileId && !path.startsWith('/files') && !path.startsWith('/drive-setup') && !path.startsWith('/statistics'))) {
     stageFromUrl = 'MARK_ATTENDANCE';
   } else if (path.startsWith('/files') || stepParam === 'files') {
     stageFromUrl = 'FILE_SELECT';
@@ -149,12 +164,13 @@ export function parseUrlNavigation(): {
     fileId,
     folderId,
     stepParam,
+    subject,
   };
 }
 
 export function navigateToStage(
   stage: AppStage,
-  params?: { fileId?: string; folderId?: string },
+  params?: { fileId?: string; folderId?: string; subject?: string },
   replace: boolean = false
 ): void {
   let targetPath = '/';
@@ -175,6 +191,12 @@ export function navigateToStage(
     case 'MARK_ATTENDANCE':
       targetPath = '/attendance';
       if (params?.fileId) searchParams.set('fileId', params.fileId);
+      if (params?.subject) searchParams.set('subject', params.subject);
+      break;
+    case 'STATISTICS':
+      targetPath = '/statistics';
+      if (params?.fileId) searchParams.set('fileId', params.fileId);
+      if (params?.subject) searchParams.set('subject', params.subject);
       break;
     case 'SUCCESS':
       targetPath = '/success';
@@ -191,8 +213,8 @@ export function navigateToStage(
   }
 
   if (replace) {
-    window.history.replaceState({ stage, fileId: params?.fileId }, document.title, fullUrl);
+    window.history.replaceState({ stage, fileId: params?.fileId, subject: params?.subject }, document.title, fullUrl);
   } else {
-    window.history.pushState({ stage, fileId: params?.fileId }, document.title, fullUrl);
+    window.history.pushState({ stage, fileId: params?.fileId, subject: params?.subject }, document.title, fullUrl);
   }
 }

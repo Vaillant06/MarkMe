@@ -4,6 +4,7 @@ import { LoginPage } from './pages/LoginPage';
 import { DriveSetupPage } from './pages/DriveSetupPage';
 import { FileSelectionPage } from './pages/FileSelectionPage';
 import { AttendanceMarkingPage } from './pages/AttendanceMarkingPage';
+import { StatisticsPage } from './pages/StatisticsPage';
 import { SuccessView } from './components/SuccessView';
 import { api } from './api/client';
 import { UserProfile, DriveFile, AttendanceCommitResponse } from './types';
@@ -13,6 +14,8 @@ import {
   getPersistedWorkflowState,
   setPersistedWorkflowState,
   clearAllWorkflowState,
+  getAttendanceDraft,
+  saveAttendanceDraft,
   parseUrlNavigation,
   navigateToStage,
 } from './utils/workflowState';
@@ -47,7 +50,34 @@ export const App: React.FC = () => {
     // Listen to browser Back / Forward events
     const handlePopState = async () => {
       const nav = parseUrlNavigation();
-      if (nav.stageFromUrl === 'MARK_ATTENDANCE') {
+      if (nav.stageFromUrl === 'STATISTICS') {
+        const fileId = nav.fileId || localStorage.getItem(STORAGE_KEYS.FILE_ID);
+        if (fileId) {
+          const subject = nav.subject || localStorage.getItem(STORAGE_KEYS.SUBJECT) || undefined;
+          if (selectedFile && selectedFile.id === fileId) {
+            setStage('STATISTICS');
+            if (subject) setPersistedWorkflowState({ subject });
+          } else {
+            try {
+              const wb = await api.getWorkbookDetails(fileId);
+              const restoredFile: DriveFile = {
+                id: fileId,
+                name: wb.file_name,
+                mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              };
+              setSelectedFile(restoredFile);
+              setStage('STATISTICS');
+              setPersistedWorkflowState({ step: 'STATISTICS', fileId, subject: subject || null });
+            } catch {
+              setStage('FILE_SELECT');
+              navigateToStage('FILE_SELECT', {}, true);
+            }
+          }
+        } else {
+          setStage('FILE_SELECT');
+          navigateToStage('FILE_SELECT', {}, true);
+        }
+      } else if (nav.stageFromUrl === 'MARK_ATTENDANCE') {
         const fileId = nav.fileId || localStorage.getItem(STORAGE_KEYS.FILE_ID);
         if (fileId) {
           if (selectedFile && selectedFile.id === fileId) {
@@ -120,13 +150,17 @@ export const App: React.FC = () => {
       const targetStep = nav.stageFromUrl || persisted.step;
       const targetFileId = nav.fileId || data.selected_file_id || persisted.fileId;
 
-      // Handle Step 3 (Mark Attendance)
+      // Handle Step 3 (Mark Attendance) or Statistics
+      const wantsStatistics =
+        nav.stageFromUrl === 'STATISTICS' ||
+        targetStep === 'STATISTICS';
+
       const wantsAttendance =
         nav.stageFromUrl === 'MARK_ATTENDANCE' ||
         targetStep === 'MARK_ATTENDANCE' ||
         Boolean(nav.fileId);
 
-      if (wantsAttendance && targetFileId) {
+      if ((wantsStatistics || wantsAttendance) && targetFileId) {
         try {
           // Verify and retrieve fresh workbook details from backend/Drive
           const wb = await api.getWorkbookDetails(targetFileId);
@@ -140,6 +174,20 @@ export const App: React.FC = () => {
             mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           };
           setSelectedFile(restoredFile);
+
+          if (wantsStatistics) {
+            const subject = nav.subject || persisted.subject || undefined;
+            setPersistedWorkflowState({
+              step: 'STATISTICS',
+              fileId: targetFileId,
+              fileName: restoredFile.name,
+              subject: subject || null,
+            });
+            setStage('STATISTICS');
+            navigateToStage('STATISTICS', { fileId: targetFileId, subject }, true);
+            return;
+          }
+
           setPersistedWorkflowState({
             step: 'MARK_ATTENDANCE',
             fileId: targetFileId,
@@ -293,6 +341,42 @@ export const App: React.FC = () => {
     navigateToStage('MARK_ATTENDANCE', { fileId: selectedFile?.id });
   };
 
+  const handleNavigateToStatistics = (currentSubject?: string) => {
+    if (!selectedFile) return;
+    const subject = currentSubject || getPersistedWorkflowState().subject || undefined;
+    setPersistedWorkflowState({
+      step: 'STATISTICS',
+      fileId: selectedFile.id,
+      fileName: selectedFile.name,
+      subject: subject || null,
+    });
+    setStage('STATISTICS');
+    navigateToStage('STATISTICS', { fileId: selectedFile.id, subject });
+  };
+
+  const handleBackToAttendance = (selectedSubject?: string) => {
+    if (!selectedFile) return;
+    const subject = selectedSubject || getPersistedWorkflowState().subject || undefined;
+    if (subject) {
+      setPersistedWorkflowState({
+        step: 'MARK_ATTENDANCE',
+        fileId: selectedFile.id,
+        fileName: selectedFile.name,
+        subject,
+      });
+      const draft = getAttendanceDraft(selectedFile.id) || {};
+      saveAttendanceDraft(selectedFile.id, { ...draft, selectedSheet: subject });
+    } else {
+      setPersistedWorkflowState({
+        step: 'MARK_ATTENDANCE',
+        fileId: selectedFile.id,
+        fileName: selectedFile.name,
+      });
+    }
+    setStage('MARK_ATTENDANCE');
+    navigateToStage('MARK_ATTENDANCE', { fileId: selectedFile.id, subject });
+  };
+
   if (initialLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
@@ -348,7 +432,16 @@ export const App: React.FC = () => {
           <AttendanceMarkingPage
             file={selectedFile}
             onBackToFileSelect={handleBackToFileSelect}
+            onNavigateToStatistics={handleNavigateToStatistics}
             onCommitSuccess={handleCommitSuccess}
+          />
+        )}
+
+        {stage === 'STATISTICS' && selectedFile && (
+          <StatisticsPage
+            file={selectedFile}
+            initialSubject={parseUrlNavigation().subject || getPersistedWorkflowState().subject || undefined}
+            onBackToAttendance={handleBackToAttendance}
           />
         )}
 

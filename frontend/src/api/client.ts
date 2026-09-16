@@ -4,7 +4,8 @@ import {
   DriveFile,
   WorkbookDetails,
   AttendancePreviewResponse,
-  AttendanceCommitResponse
+  AttendanceCommitResponse,
+  SubjectStatisticsResponse,
 } from '../types';
 
 const API_BASE = '/api';
@@ -87,6 +88,10 @@ export const api = {
 
   // Workbooks
   getWorkbookDetails: (file_id: string) => request<WorkbookDetails>(`/workbooks/${file_id}/details`),
+  getSubjectStatistics: (fileId: string, sheetName: string, threshold: number = 75.0) =>
+    request<SubjectStatisticsResponse>(
+      `/workbooks/${encodeURIComponent(fileId)}/subjects/${encodeURIComponent(sheetName)}/statistics?threshold=${threshold}`
+    ),
   selectWorkbook: (file_id: string, file_name?: string) =>
     request<{ success: boolean; file_id: string; file_name?: string }>('/workbooks/select', {
       method: 'POST',

@@ -91,3 +91,47 @@ export interface AttendanceCommitResponse {
   target_col_letter: string;
   new_revision_id?: string;
 }
+
+export interface SessionStatisticsItem {
+  col_idx: number;
+  col_letter: string;
+  header_raw: string;
+  date: string;
+  period: string;
+  session_label: string;
+  present_count: number;
+  absent_count: number;
+  unrecorded_count: number;
+  attendance_percentage: number;
+}
+
+export interface SubjectStatisticsResponse {
+  file_id: string;
+  file_name: string;
+  sheet_name: string;
+  subject_code: string;
+  subject_name: string;
+  faculty_name: string;
+  class_section: string;
+  academic_year: string;
+  threshold: number;
+  has_sessions: boolean;
+  message?: string | null;
+  total_students: number;
+  total_sessions: number;
+  average_attendance: number;
+  average_attendance_raw: number;
+  total_present: number;
+  total_absent: number;
+  total_unrecorded: number;
+  unexpected_values_count: number;
+  below_threshold_count: number;
+  present_percentage: number;
+  absent_percentage: number;
+  distribution_90_100: number;
+  distribution_80_89: number;
+  distribution_75_79: number;
+  distribution_below_75: number;
+  sessions: SessionStatisticsItem[];
+}
+

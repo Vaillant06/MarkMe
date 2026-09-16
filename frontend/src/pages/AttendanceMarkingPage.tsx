@@ -6,7 +6,8 @@ import {
   Eye,
   ArrowLeft,
   FileSpreadsheet,
-  Info
+  Info,
+  BarChart2,
 } from 'lucide-react';
 import { api } from '../api/client';
 import {
@@ -27,12 +28,14 @@ import {
 interface AttendanceMarkingPageProps {
   file: DriveFile;
   onBackToFileSelect: () => void;
+  onNavigateToStatistics: (currentSubject?: string) => void;
   onCommitSuccess: (res: AttendanceCommitResponse) => void;
 }
 
 export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
   file,
   onBackToFileSelect,
+  onNavigateToStatistics,
   onCommitSuccess,
 }) => {
   const [details, setDetails] = useState<WorkbookDetails | null>(null);
@@ -227,7 +230,7 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Top Breadcrumb Bar */}
+      {/* Top Action / Navigation Bar */}
       <div className="flex items-center justify-between mb-6">
         <button
           onClick={onBackToFileSelect}
@@ -237,9 +240,25 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
           <span>Change Workbook</span>
         </button>
 
-        <div className="flex items-center space-x-2 bg-slate-100 px-3 py-1 rounded-full text-xs text-slate-700 border border-slate-200">
-          <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-          <span className="font-semibold truncate max-w-xs">{file.name}</span>
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-full text-xs text-slate-700 border border-slate-200">
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="font-semibold truncate max-w-xs">{file.name}</span>
+          </div>
+
+          {Boolean(file?.id) && (
+            <button
+              type="button"
+              onClick={() => onNavigateToStatistics(selectedSheet)}
+              data-testid="statistics-button"
+              aria-label="View Subject Statistics"
+              className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition border border-slate-800 hover:border-slate-700 cursor-pointer"
+              title="Subject Statistics"
+            >
+              <BarChart2 className="w-3.5 h-3.5 text-blue-400" />
+              <span>Statistics</span>
+            </button>
+          )}
         </div>
       </div>
 
