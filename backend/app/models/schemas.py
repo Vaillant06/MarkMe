@@ -127,3 +127,44 @@ class AttendanceCommitResponse(BaseModel):
     absent_count: int
     target_col_letter: str
     new_revision_id: Optional[str] = None
+
+class SessionStatisticsItem(BaseModel):
+    col_idx: int
+    col_letter: str
+    header_raw: str
+    date: str
+    period: str
+    session_label: str
+    present_count: int
+    absent_count: int
+    unrecorded_count: int
+    attendance_percentage: float
+
+class SubjectStatisticsResponse(BaseModel):
+    file_id: str
+    file_name: str
+    sheet_name: str
+    subject_code: str
+    subject_name: str
+    faculty_name: str
+    class_section: str
+    academic_year: str
+    threshold: float = 75.0
+    has_sessions: bool = True
+    message: Optional[str] = None
+    total_students: int
+    total_sessions: int
+    average_attendance: float
+    average_attendance_raw: float
+    total_present: int
+    total_absent: int
+    total_unrecorded: int
+    unexpected_values_count: int = 0
+    below_threshold_count: int
+    present_percentage: float
+    absent_percentage: float
+    distribution_90_100: int
+    distribution_80_89: int
+    distribution_75_79: int
+    distribution_below_75: int
+    sessions: List[SessionStatisticsItem] = []
