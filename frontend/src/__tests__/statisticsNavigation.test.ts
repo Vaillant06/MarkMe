@@ -508,12 +508,12 @@ describe('Statistics Button and Navigation', () => {
     expect(container.innerHTML).toContain('Attendance Trend');
     expect(container.querySelector('svg')).not.toBeNull();
 
-    // Assert Distribution & Donut
+    // Assert Distribution and verify Overall Attendance is removed
     expect(container.innerHTML).toContain('Attendance Distribution');
     expect(container.innerHTML).toContain('90–100%');
     expect(container.innerHTML).toContain('80–89%');
     expect(container.innerHTML).toContain('75–79%');
-    expect(container.innerHTML).toContain('Overall Attendance');
+    expect(container.innerHTML).not.toContain('Overall Attendance');
 
     // Assert Session Summary Table
     expect(container.innerHTML).toContain('Session Summary');
@@ -635,6 +635,295 @@ describe('Statistics Button and Navigation', () => {
     // Assert Empty State Notice
     expect(container.innerHTML).toContain('No Recorded Sessions');
     expect(container.innerHTML).toContain('No attendance sessions have been recorded for this subject.');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('supports threshold toggle between 50% and 75%, removing 80% and 85%', async () => {
+    const { Window } = await import('happy-dom');
+    const windowShim = new Window();
+    const docShim = windowShim.document;
+    const container = docShim.createElement('div');
+    docShim.body.appendChild(container);
+
+    const { api } = await import('../api/client');
+
+    const mockWb = {
+      file_id: 'wb_thresh_test',
+      file_name: 'Attendance.xlsx',
+      academic_year: '2025-2026',
+      class_section: 'CSE-A',
+      subjects: [
+        { code: 'UIT3562', name: 'Cloud Computing', sheet_name: 'UIT3562' },
+      ],
+    };
+
+    const baseStats = {
+      class_section: 'CSE-A',
+      academic_year: '2025-2026',
+      subject_name: 'Cloud Computing',
+      subject_code: 'UIT3562',
+      sheet_name: 'UIT3562',
+      has_sessions: true,
+      total_students: 71,
+      total_sessions: 20,
+      average_attendance: 82.5,
+      average_attendance_raw: 82.5,
+      total_present: 958,
+      total_absent: 391,
+      total_unrecorded: 0,
+      unexpected_values_count: 0,
+      below_threshold_count: 41,
+      present_percentage: 71.0,
+      absent_percentage: 29.0,
+      distribution_90_100: 25,
+      distribution_80_89: 30,
+      distribution_75_79: 10,
+      distribution_below_75: 6,
+      sessions: [
+        {
+          col_idx: 6,
+          col_letter: 'F',
+          header_raw: '29/06/2026',
+          date: '29/06/2026',
+          period: '1',
+          session_label: '29/06 H1',
+          present_count: 70,
+          absent_count: 1,
+          total_students: 71,
+          attendance_percentage: 98.6,
+        },
+      ],
+    };
+
+    vi.spyOn(api, 'getWorkbookDetails').mockResolvedValue(mockWb as any);
+    const getStatsSpy = vi.spyOn(api, 'getSubjectStatistics').mockImplementation(async (_f, _s, thresh) => {
+      return {
+        ...baseStats,
+        threshold: thresh ?? 75.0,
+        below_threshold_count: thresh === 50 ? 5 : 41,
+      } as any;
+    });
+
+    const { StatisticsPage } = await import('../pages/StatisticsPage');
+    const { createRoot } = await import('react-dom/client');
+    const { act } = await import('react');
+
+    const mockFile: DriveFile = {
+      id: 'wb_thresh_test',
+      name: 'Attendance.xlsx',
+      mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
+
+    const root = createRoot(container as unknown as HTMLElement);
+    await act(async () => {
+      root.render(
+        React.createElement(StatisticsPage, {
+          file: mockFile,
+          initialSubject: 'UIT3562',
+          onBackToAttendance: () => {},
+        })
+      );
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+
+    // 1. Verify threshold 50% and 75% exist
+    const btn50 = container.querySelector('[data-testid="threshold-50"]');
+    const btn75 = container.querySelector('[data-testid="threshold-75"]');
+    const btn80 = container.querySelector('[data-testid="threshold-80"]');
+    const btn85 = container.querySelector('[data-testid="threshold-85"]');
+
+    expect(btn50).not.toBeNull();
+    expect(btn75).not.toBeNull();
+    expect(btn80).toBeNull();
+    expect(btn85).toBeNull();
+
+    // Default is 75%
+    expect(container.innerHTML).toContain('Below 75%');
+    expect(container.innerHTML).toContain('41');
+
+    // 2. Click 50% threshold
+    await act(async () => {
+      btn50?.dispatchEvent(new windowShim.MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+
+    expect(getStatsSpy).toHaveBeenCalledWith('wb_thresh_test', 'UIT3562', 50);
+    expect(container.innerHTML).toContain('Below 50%');
+    expect(container.innerHTML).toContain('5');
+
+    // 3. Switch back to 75%
+    await act(async () => {
+      btn75?.dispatchEvent(new windowShim.MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+
+    expect(getStatsSpy).toHaveBeenCalledWith('wb_thresh_test', 'UIT3562', 75);
+    expect(container.innerHTML).toContain('Below 75%');
+    expect(container.innerHTML).toContain('41');
+
+    // 4. Verify Session Summary has max-height and overflow scroll classes
+    expect(container.innerHTML).toContain('max-h-[380px]');
+    expect(container.innerHTML).toContain('overflow-y-auto');
+    expect(container.innerHTML).toContain('sticky top-0');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('keeps Attendance Trend points stable on click, anchors tooltip, and allows toggling selection', async () => {
+    const { Window } = await import('happy-dom');
+    const windowShim = new Window();
+    const docShim = windowShim.document;
+    const container = docShim.createElement('div');
+    docShim.body.appendChild(container);
+
+    const { api } = await import('../api/client');
+
+    const mockWb = {
+      file_id: 'wb_click_test',
+      file_name: 'Attendance.xlsx',
+      academic_year: '2025-2026',
+      class_section: 'CSE-A',
+      subjects: [
+        { code: 'UIT3562', name: 'Cloud Computing', sheet_name: 'UIT3562' },
+      ],
+    };
+
+    const mockStats = {
+      class_section: 'CSE-A',
+      academic_year: '2025-2026',
+      subject_name: 'Cloud Computing',
+      subject_code: 'UIT3562',
+      sheet_name: 'UIT3562',
+      has_sessions: true,
+      total_students: 71,
+      total_sessions: 2,
+      average_attendance: 90.0,
+      average_attendance_raw: 90.0,
+      total_present: 130,
+      total_absent: 12,
+      total_unrecorded: 0,
+      unexpected_values_count: 0,
+      below_threshold_count: 5,
+      present_percentage: 91.5,
+      absent_percentage: 8.5,
+      distribution_90_100: 50,
+      distribution_80_89: 15,
+      distribution_75_79: 3,
+      distribution_below_75: 3,
+      sessions: [
+        {
+          col_idx: 6,
+          col_letter: 'F',
+          header_raw: '29/06/2026',
+          date: '29/06/2026',
+          period: '1',
+          session_label: '29/06 H1',
+          present_count: 68,
+          absent_count: 3,
+          total_students: 71,
+          attendance_percentage: 95.8,
+        },
+        {
+          col_idx: 7,
+          col_letter: 'G',
+          header_raw: '30/06/2026',
+          date: '30/06/2026',
+          period: '2',
+          session_label: '30/06 H2',
+          present_count: 62,
+          absent_count: 9,
+          total_students: 71,
+          attendance_percentage: 87.3,
+        },
+      ],
+    };
+
+    vi.spyOn(api, 'getWorkbookDetails').mockResolvedValue(mockWb as any);
+    vi.spyOn(api, 'getSubjectStatistics').mockResolvedValue(mockStats as any);
+
+    const { StatisticsPage } = await import('../pages/StatisticsPage');
+    const { createRoot } = await import('react-dom/client');
+    const { act } = await import('react');
+
+    const mockFile: DriveFile = {
+      id: 'wb_click_test',
+      name: 'Attendance.xlsx',
+      mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
+
+    const root = createRoot(container as unknown as HTMLElement);
+    await act(async () => {
+      root.render(
+        React.createElement(StatisticsPage, {
+          file: mockFile,
+          initialSubject: 'UIT3562',
+          onBackToAttendance: () => {},
+        })
+      );
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+
+    // Verify SVG circles do NOT contain transform scale classes that cause shifting
+    const svg = container.querySelector('svg');
+    expect(svg).not.toBeNull();
+    expect(container.innerHTML).not.toContain('group-hover:scale-150');
+    expect(container.innerHTML).not.toContain('transition-transform');
+
+    // Before clicking: details strip shows instruction placeholder
+    expect(container.innerHTML).toContain('Click or hover any session point to view details');
+
+    // Find first interactive data point group
+    const pointGroups = container.querySelectorAll('g.cursor-pointer');
+    expect(pointGroups.length).toBe(2);
+
+    const firstPoint = pointGroups[0];
+
+    // Click first point
+    await act(async () => {
+      firstPoint.dispatchEvent(new windowShim.MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    // Details strip now shows the selected session and "Selected" badge
+    expect(container.innerHTML).toContain('29/06/2026 — Hour 1');
+    expect(container.innerHTML).toContain('Selected');
+    expect(container.innerHTML).toContain('95.8%');
+
+    // Anchored tooltip in SVG is rendered with session date and present/absent breakdown
+    expect(container.innerHTML).toContain('29/06/2026 • Hour 1');
+    expect(container.innerHTML).toContain('68 Present • 3 Absent');
+
+    // Deselect by clicking point again
+    await act(async () => {
+      firstPoint.dispatchEvent(new windowShim.MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    // Returns to instruction placeholder
+    expect(container.innerHTML).toContain('Click or hover any session point to view details');
 
     await act(async () => {
       root.unmount();
