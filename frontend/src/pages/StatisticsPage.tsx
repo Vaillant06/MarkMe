@@ -12,6 +12,7 @@ import {
   ArrowUpDown,
   RefreshCw,
   Sliders,
+  Info,
 } from 'lucide-react';
 import { api } from '../api/client';
 import {
@@ -66,8 +67,10 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
-  // Trend chart tooltip hover state
+  // Trend chart tooltip hover and click selection state
   const [hoveredSession, setHoveredSession] = useState<SessionStatisticsItem | null>(null);
+  const [selectedSession, setSelectedSession] = useState<SessionStatisticsItem | null>(null);
+  const activeSession = hoveredSession || selectedSession;
 
   // 1. Load workbook details to populate subject dropdown
   useEffect(() => {
@@ -135,6 +138,8 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
   // Handle subject change from dropdown
   const handleSubjectChange = (newSheet: string) => {
     setSelectedSheet(newSheet);
+    setSelectedSession(null);
+    setHoveredSession(null);
     // Also sync with attendance draft so returning to attendance respects this subject
     const draft = getAttendanceDraft(file.id) || {};
     saveAttendanceDraft(file.id, { ...draft, selectedSheet: newSheet });
@@ -269,19 +274,20 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
                 </div>
               </div>
 
-              {/* Configurable Threshold Toggle */}
-              <div className="min-w-[130px]">
+              {/* Configurable Threshold Toggle: Only 50% and 75% */}
+              <div className="min-w-[110px]">
                 <label className="block text-[10px] font-bold text-blue-300 uppercase tracking-wider mb-1 flex items-center space-x-1">
                   <Sliders className="w-3 h-3" />
                   <span>Threshold</span>
                 </label>
                 <div className="flex items-center space-x-1 bg-slate-800/90 border border-slate-700 rounded-xl p-1">
-                  {[75, 80, 85].map((t) => (
+                  {[50, 75].map((t) => (
                     <button
                       key={t}
                       type="button"
                       onClick={() => setThreshold(t)}
-                      className={`px-2 py-1 text-xs font-bold rounded-lg transition ${
+                      data-testid={`threshold-${t}`}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
                         threshold === t
                           ? 'bg-blue-600 text-white shadow-xs'
                           : 'text-slate-400 hover:text-white'
@@ -519,164 +525,119 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
                     <TrendLineChart
                       sessions={stats.sessions}
                       threshold={threshold}
+                      activeSession={activeSession}
                       onHoverSession={setHoveredSession}
+                      onSelectSession={setSelectedSession}
                     />
 
-                    {/* Interactive Tooltip Card on Hover */}
-                    {hoveredSession && (
-                      <div className="mt-3 p-3 bg-white border border-slate-200 rounded-xl shadow-md text-xs flex flex-wrap items-center justify-between gap-4 animate-fade-in">
-                        <div className="flex items-center space-x-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                          <span className="font-bold text-slate-900">
-                            {hoveredSession.date || 'Col ' + hoveredSession.col_letter} — Hour{' '}
-                            {hoveredSession.period}
+                    {/* Interactive Session Details Strip (Stable height to prevent layout shift) */}
+                    <div className="mt-3 min-h-[52px] p-3 bg-white border border-slate-200 rounded-xl shadow-2xs text-xs flex flex-wrap items-center justify-between gap-4">
+                      {activeSession ? (
+                        <>
+                          <div className="flex items-center space-x-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                            <span className="font-bold text-slate-900">
+                              {activeSession.date || 'Col ' + activeSession.col_letter} — Hour{' '}
+                              {activeSession.period}
+                            </span>
+                            {selectedSession?.col_idx === activeSession.col_idx && (
+                              <span className="text-[10px] bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">
+                                Selected
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-4 text-slate-600">
+                            <span>
+                              Attendance:{' '}
+                              <strong
+                                className={
+                                  activeSession.attendance_percentage >= threshold
+                                    ? 'text-emerald-700'
+                                    : 'text-rose-700'
+                                }
+                              >
+                                {activeSession.attendance_percentage.toFixed(1)}%
+                              </strong>
+                            </span>
+                            <span>
+                              Present:{' '}
+                              <strong className="text-emerald-700">
+                                {activeSession.present_count}
+                              </strong>
+                            </span>
+                            <span>
+                              Absent:{' '}
+                              <strong className="text-rose-700">
+                                {activeSession.absent_count}
+                              </strong>
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full flex items-center justify-between text-slate-400">
+                          <span className="flex items-center space-x-1.5 text-[11px]">
+                            <Info className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Click or hover any session point to view details</span>
+                          </span>
+                          <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 hidden sm:inline">
+                            Interactive Trend
                           </span>
                         </div>
-                        <div className="flex items-center space-x-4 text-slate-600">
-                          <span>
-                            Attendance:{' '}
-                            <strong
-                              className={
-                                hoveredSession.attendance_percentage >= threshold
-                                  ? 'text-emerald-700'
-                                  : 'text-rose-700'
-                              }
-                            >
-                              {hoveredSession.attendance_percentage.toFixed(1)}%
-                            </strong>
-                          </span>
-                          <span>
-                            Present:{' '}
-                            <strong className="text-emerald-700">
-                              {hoveredSession.present_count}
-                            </strong>
-                          </span>
-                          <span>
-                            Absent:{' '}
-                            <strong className="text-rose-700">
-                              {hoveredSession.absent_count}
-                            </strong>
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Sections 5 & 6: Attendance Distribution & Overall Attendance */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Section 5: Attendance Distribution (Bar Chart) */}
-                <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 sm:p-8 space-y-4 flex flex-col justify-between">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 tracking-tight">
-                      Attendance Distribution
-                    </h2>
-                    <p className="text-xs text-slate-500">
-                      Breakdown of students grouped by individual attendance range
-                    </p>
-                  </div>
-
-                  <div className="space-y-3.5 pt-2">
-                    <DistributionBar
-                      label="90–100%"
-                      count={stats.distribution_90_100}
-                      total={stats.total_students}
-                      colorClass="bg-emerald-600"
-                      textClass="text-emerald-800"
-                    />
-                    <DistributionBar
-                      label="80–89%"
-                      count={stats.distribution_80_89}
-                      total={stats.total_students}
-                      colorClass="bg-blue-600"
-                      textClass="text-blue-800"
-                    />
-                    <DistributionBar
-                      label="75–79%"
-                      count={stats.distribution_75_79}
-                      total={stats.total_students}
-                      colorClass="bg-amber-500"
-                      textClass="text-amber-800"
-                    />
-                    <DistributionBar
-                      label="Below 75%"
-                      count={stats.distribution_below_75}
-                      total={stats.total_students}
-                      colorClass="bg-rose-600"
-                      textClass="text-rose-800"
-                    />
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-200 text-[11px] text-slate-400 flex items-center justify-between">
-                    <span>Mutually exclusive ranges</span>
-                    <span>Total students: {stats.total_students}</span>
-                  </div>
+              {/* Section 5: Attendance Distribution (Bar Chart) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 sm:p-8 space-y-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                    Attendance Distribution
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Breakdown of students grouped by individual attendance range
+                  </p>
                 </div>
 
-                {/* Section 6: Overall Attendance (Part-to-Whole) */}
-                <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 sm:p-8 space-y-4 flex flex-col justify-between">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 tracking-tight">
-                      Overall Attendance
-                    </h2>
-                    <p className="text-xs text-slate-500">
-                      Aggregate proportion of Present vs Absent attendance entries
-                    </p>
-                  </div>
+                <div className="space-y-3.5 pt-2">
+                  <DistributionBar
+                    label="90–100%"
+                    count={stats.distribution_90_100}
+                    total={stats.total_students}
+                    colorClass="bg-emerald-600"
+                    textClass="text-emerald-800"
+                  />
+                  <DistributionBar
+                    label="80–89%"
+                    count={stats.distribution_80_89}
+                    total={stats.total_students}
+                    colorClass="bg-blue-600"
+                    textClass="text-blue-800"
+                  />
+                  <DistributionBar
+                    label="75–79%"
+                    count={stats.distribution_75_79}
+                    total={stats.total_students}
+                    colorClass="bg-amber-500"
+                    textClass="text-amber-800"
+                  />
+                  <DistributionBar
+                    label="Below 75%"
+                    count={stats.distribution_below_75}
+                    total={stats.total_students}
+                    colorClass="bg-rose-600"
+                    textClass="text-rose-800"
+                  />
+                </div>
 
-                  {/* Donut Chart Visualization */}
-                  <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-2">
-                    <DonutChart
-                      presentPct={stats.present_percentage}
-                      absentPct={stats.absent_percentage}
-                    />
-
-                    {/* Breakdown legend */}
-                    <div className="space-y-4 min-w-[160px]">
-                      <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
-                        <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-800">
-                          <span className="w-3 h-3 rounded-full bg-emerald-600" />
-                          <span>Present</span>
-                        </div>
-                        <p className="text-xl font-black text-slate-900 mt-1">
-                          {stats.total_present.toLocaleString()}
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          {stats.present_percentage.toFixed(1)}% of total entries
-                        </p>
-                      </div>
-
-                      <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
-                        <div className="flex items-center space-x-2 text-xs font-semibold text-rose-800">
-                          <span className="w-3 h-3 rounded-full bg-rose-600" />
-                          <span>Absent</span>
-                        </div>
-                        <p className="text-xl font-black text-slate-900 mt-1">
-                          {stats.total_absent.toLocaleString()}
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          {stats.absent_percentage.toFixed(1)}% of total entries
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-200 text-[11px] text-slate-400 flex items-center justify-between">
-                    <span>
-                      Total Recorded Entries:{' '}
-                      {(stats.total_present + stats.total_absent).toLocaleString()}
-                    </span>
-                    {stats.unexpected_values_count > 0 && (
-                      <span className="text-amber-600">
-                        {stats.unexpected_values_count} non-standard values ignored
-                      </span>
-                    )}
-                  </div>
+                <div className="pt-3 border-t border-slate-200 text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>Mutually exclusive ranges</span>
+                  <span>Total students: {stats.total_students}</span>
                 </div>
               </div>
 
-              {/* Section 7: Session Summary Table */}
+              {/* Section 6: Session Summary Table */}
               {stats.sessions.length > 0 && (
                 <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 sm:p-8 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -693,14 +654,14 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
                     </span>
                   </div>
 
-                  {/* Compact Responsive Table */}
-                  <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-2xs">
-                    <table className="w-full text-left text-xs text-slate-700">
-                      <thead className="bg-slate-100/90 text-slate-800 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200">
+                  {/* Fixed/Max-Height Scrollable Table Container */}
+                  <div className="overflow-x-auto overflow-y-auto max-h-[380px] rounded-2xl border border-slate-200 bg-white shadow-2xs">
+                    <table className="w-full min-w-[520px] text-left text-xs text-slate-700">
+                      <thead className="sticky top-0 z-10 bg-slate-100 text-slate-800 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200 shadow-xs">
                         <tr>
                           <th
                             onClick={() => toggleSort('date')}
-                            className="px-4 py-3.5 cursor-pointer hover:bg-slate-200/70 transition select-none"
+                            className="sticky top-0 bg-slate-100 px-4 py-3.5 cursor-pointer hover:bg-slate-200/70 transition select-none"
                           >
                             <div className="flex items-center space-x-1">
                               <span>Date</span>
@@ -709,7 +670,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
                           </th>
                           <th
                             onClick={() => toggleSort('period')}
-                            className="px-4 py-3.5 cursor-pointer hover:bg-slate-200/70 transition select-none"
+                            className="sticky top-0 bg-slate-100 px-4 py-3.5 cursor-pointer hover:bg-slate-200/70 transition select-none"
                           >
                             <div className="flex items-center space-x-1">
                               <span>Period</span>
@@ -718,7 +679,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
                           </th>
                           <th
                             onClick={() => toggleSort('present')}
-                            className="px-4 py-3.5 cursor-pointer hover:bg-slate-200/70 transition select-none"
+                            className="sticky top-0 bg-slate-100 px-4 py-3.5 cursor-pointer hover:bg-slate-200/70 transition select-none"
                           >
                             <div className="flex items-center space-x-1">
                               <span>Present</span>
@@ -727,7 +688,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
                           </th>
                           <th
                             onClick={() => toggleSort('absent')}
-                            className="px-4 py-3.5 cursor-pointer hover:bg-slate-200/70 transition select-none"
+                            className="sticky top-0 bg-slate-100 px-4 py-3.5 cursor-pointer hover:bg-slate-200/70 transition select-none"
                           >
                             <div className="flex items-center space-x-1">
                               <span>Absent</span>
@@ -736,7 +697,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
                           </th>
                           <th
                             onClick={() => toggleSort('attendance')}
-                            className="px-4 py-3.5 cursor-pointer hover:bg-slate-200/70 transition select-none"
+                            className="sticky top-0 bg-slate-100 px-4 py-3.5 cursor-pointer hover:bg-slate-200/70 transition select-none"
                           >
                             <div className="flex items-center space-x-1">
                               <span>Attendance %</span>
@@ -814,13 +775,17 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
 interface TrendLineChartProps {
   sessions: SessionStatisticsItem[];
   threshold: number;
+  activeSession: SessionStatisticsItem | null;
   onHoverSession: (session: SessionStatisticsItem | null) => void;
+  onSelectSession: (session: SessionStatisticsItem | null) => void;
 }
 
 const TrendLineChart: React.FC<TrendLineChartProps> = ({
   sessions,
   threshold,
+  activeSession,
   onHoverSession,
+  onSelectSession,
 }) => {
   if (!sessions || sessions.length === 0) return null;
 
@@ -854,11 +819,16 @@ const TrendLineChart: React.FC<TrendLineChartProps> = ({
 
   const thresholdY = padTop + chartH - (threshold / 100) * chartH;
 
+  const activePoint = activeSession
+    ? points.find((p) => p.sess.col_idx === activeSession.col_idx)
+    : null;
+
   return (
     <div className="w-full overflow-x-auto">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="w-full min-w-[600px] h-auto select-none"
+        onClick={() => onSelectSession(null)}
       >
         <defs>
           <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
@@ -919,32 +889,52 @@ const TrendLineChart: React.FC<TrendLineChartProps> = ({
         {/* Data points */}
         {points.map((p, idx) => {
           const isAbove = p.sess.attendance_percentage >= threshold;
+          const isActive = activeSession?.col_idx === p.sess.col_idx;
           return (
             <g
-              key={idx}
-              className="cursor-pointer group"
+              key={p.sess.col_idx || idx}
+              className="cursor-pointer"
               onMouseEnter={() => onHoverSession(p.sess)}
               onMouseLeave={() => onHoverSession(null)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onSelectSession(isActive ? null : p.sess);
+              }}
             >
+              {/* Outer halo when active (concentric, zero translation) */}
+              {isActive && (
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r="9"
+                  fill="none"
+                  stroke={isAbove ? '#2563eb' : '#f43f5e'}
+                  strokeWidth="2.5"
+                  opacity="0.45"
+                />
+              )}
+              {/* Inner point - concentric radius change without any CSS transform */}
               <circle
                 cx={p.x}
                 cy={p.y}
-                r="4.5"
+                r={isActive ? 6 : 4.5}
                 fill={isAbove ? '#2563eb' : '#f43f5e'}
                 stroke="#ffffff"
                 strokeWidth="2"
-                className="transition-transform group-hover:scale-150"
               />
-              {/* Invisible larger hit target for easy mouse hover */}
-              <circle cx={p.x} cy={p.y} r="12" fill="transparent" />
+              {/* Invisible larger hit target for easy mouse hover & click */}
+              <circle cx={p.x} cy={p.y} r="14" fill="transparent" />
 
               {/* X-axis labels (render every 2nd or 3rd label if too dense) */}
-              {(numPoints <= 12 || idx % Math.ceil(numPoints / 10) === 0 || idx === numPoints - 1) && (
+              {(numPoints <= 12 ||
+                idx % Math.ceil(numPoints / 10) === 0 ||
+                idx === numPoints - 1) && (
                 <text
                   x={p.x}
                   y={height - 14}
                   textAnchor="middle"
-                  className="text-[9px] fill-slate-500 font-mono"
+                  className="text-[9px] fill-slate-500 font-mono pointer-events-none"
                 >
                   {p.sess.session_label}
                 </text>
@@ -952,6 +942,76 @@ const TrendLineChart: React.FC<TrendLineChartProps> = ({
             </g>
           );
         })}
+
+        {/* Anchored Tooltip for Selected/Hovered Point */}
+        {activePoint && (() => {
+          const isAbove = activePoint.sess.attendance_percentage >= threshold;
+          const boxW = 150;
+          const boxH = 50;
+          const boxX = Math.max(
+            padLeft,
+            Math.min(width - padRight - boxW, activePoint.x - boxW / 2)
+          );
+          const placeAbove = activePoint.y - (boxH + 12) >= padTop;
+          const boxY = placeAbove ? activePoint.y - boxH - 10 : activePoint.y + 10;
+          const arrowTipY = placeAbove ? activePoint.y - 4 : activePoint.y + 4;
+          const arrowBaseY = placeAbove ? boxY + boxH : boxY;
+
+          return (
+            <g pointerEvents="none" className="select-none">
+              {/* Tooltip Card Box */}
+              <rect
+                x={boxX}
+                y={boxY}
+                width={boxW}
+                height={boxH}
+                rx="8"
+                fill="#0f172a"
+                opacity="0.95"
+              />
+              {/* Pointer Arrow */}
+              <polygon
+                points={`${activePoint.x - 5},${arrowBaseY} ${activePoint.x + 5},${arrowBaseY} ${activePoint.x},${arrowTipY}`}
+                fill="#0f172a"
+                opacity="0.95"
+              />
+              {/* Line 1: Session Date & Period */}
+              <text
+                x={boxX + boxW / 2}
+                y={boxY + 16}
+                textAnchor="middle"
+                fill="#f8fafc"
+                fontSize="10"
+                fontWeight="700"
+              >
+                {activePoint.sess.date || 'Col ' + activePoint.sess.col_letter} • Hour {activePoint.sess.period}
+              </text>
+              {/* Line 2: Attendance Percentage */}
+              <text
+                x={boxX + boxW / 2}
+                y={boxY + 31}
+                textAnchor="middle"
+                fill={isAbove ? '#34d399' : '#fb7185'}
+                fontSize="12"
+                fontWeight="800"
+                fontFamily="monospace"
+              >
+                {activePoint.sess.attendance_percentage.toFixed(1)}%
+              </text>
+              {/* Line 3: Present / Absent breakdown */}
+              <text
+                x={boxX + boxW / 2}
+                y={boxY + 44}
+                textAnchor="middle"
+                fill="#94a3b8"
+                fontSize="9"
+                fontWeight="500"
+              >
+                {activePoint.sess.present_count} Present • {activePoint.sess.absent_count} Absent
+              </text>
+            </g>
+          );
+        })()}
       </svg>
     </div>
   );
@@ -991,80 +1051,6 @@ const DistributionBar: React.FC<DistributionBarProps> = ({
           className={`h-full ${colorClass} rounded-full transition-all duration-500`}
           style={{ width: `${Math.max(pct, count > 0 ? 3 : 0)}%` }}
         />
-      </div>
-    </div>
-  );
-};
-
-// =========================================================================
-// Helper Component: Donut Chart (Present vs Absent)
-// =========================================================================
-interface DonutChartProps {
-  presentPct: number;
-  absentPct: number;
-}
-
-const DonutChart: React.FC<DonutChartProps> = ({ presentPct, absentPct }) => {
-  const size = 160;
-  const strokeWidth = 22;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-
-  // Present stroke offset
-  const presentStroke = (presentPct / 100) * circumference;
-  const absentStroke = (absentPct / 100) * circumference;
-
-  return (
-    <div className="relative flex items-center justify-center">
-      <svg width={size} height={size} className="transform -rotate-90">
-        {/* Background full circle */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="#f1f5f9"
-          strokeWidth={strokeWidth}
-        />
-
-        {/* Present Arc (Emerald) */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="#059669"
-          strokeWidth={strokeWidth}
-          strokeDasharray={`${presentStroke} ${circumference}`}
-          strokeLinecap="round"
-          className="transition-all duration-700"
-        />
-
-        {/* Absent Arc (Rose) */}
-        {absentPct > 0 && (
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke="#e11d48"
-            strokeWidth={strokeWidth}
-            strokeDasharray={`${absentStroke} ${circumference}`}
-            strokeDashoffset={-presentStroke}
-            strokeLinecap="round"
-            className="transition-all duration-700"
-          />
-        )}
-      </svg>
-
-      {/* Center Label */}
-      <div className="absolute text-center">
-        <span className="text-2xl font-black text-slate-900 tracking-tight">
-          {presentPct.toFixed(1)}%
-        </span>
-        <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-          Present
-        </span>
       </div>
     </div>
   );
