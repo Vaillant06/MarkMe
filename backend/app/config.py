@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # Google OAuth 2.0
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/auth/google/callback"
+    GOOGLE_REDIRECT_URI: str = "https://markme-zrfk.onrender.com/google/callback"
     
     # Session & Security (remember authentication for 1 month / 30 days)
     SESSION_SECRET: str = "markme-production-session-key-change-via-env"
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./markme.db"
     
     # Front-end origin(s) for CORS (comma-separated if multiple)
-    FRONTEND_URL: str = "https://frontend-iota-plum-38.vercel.app"
+    FRONTEND_URL: str = "https://markme-frontend.vercel.app"
     ALLOWED_ORIGINS: Optional[str] = None
 
     model_config = SettingsConfigDict(
