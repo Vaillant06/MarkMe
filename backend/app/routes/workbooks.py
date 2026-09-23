@@ -19,7 +19,8 @@ async def get_workbook_details(file_id: str, user: dict = Depends(get_current_us
     """
     drive_svc = DriveService(
         access_token=user.get("access_token"),
-        refresh_token=user.get("refresh_token")
+        refresh_token=user.get("refresh_token"),
+        user_id=user.get("id") or user.get("email")
     )
     try:
         content_bytes, file_name, head_rev = drive_svc.download_workbook(file_id)
@@ -87,7 +88,8 @@ async def get_subject_statistics(
     """
     drive_svc = DriveService(
         access_token=user.get("access_token"),
-        refresh_token=user.get("refresh_token")
+        refresh_token=user.get("refresh_token"),
+        user_id=user.get("id") or user.get("email")
     )
     try:
         content_bytes, file_name, _ = drive_svc.download_workbook(file_id)

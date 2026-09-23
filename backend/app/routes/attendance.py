@@ -26,7 +26,8 @@ async def preview_attendance(req: AttendancePreviewRequest, user: dict = Depends
     """
     drive_svc = DriveService(
         access_token=user.get("access_token"),
-        refresh_token=user.get("refresh_token")
+        refresh_token=user.get("refresh_token"),
+        user_id=user.get("id") or user.get("email")
     )
     try:
         content_bytes, _, _ = drive_svc.download_workbook(req.file_id)
@@ -73,7 +74,8 @@ async def commit_attendance(req: AttendanceCommitRequest, user: dict = Depends(g
     """
     drive_svc = DriveService(
         access_token=user.get("access_token"),
-        refresh_token=user.get("refresh_token")
+        refresh_token=user.get("refresh_token"),
+        user_id=user.get("id") or user.get("email")
     )
     try:
         content_bytes, file_name, current_rev = drive_svc.download_workbook(req.file_id)

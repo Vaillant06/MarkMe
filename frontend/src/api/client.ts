@@ -8,7 +8,10 @@ import {
   SubjectStatisticsResponse,
 } from '../types';
 
-const API_BASE = '/api';
+const rawApiUrl = ((import.meta.env.VITE_API_URL as string | undefined) || '').trim().replace(/\/$/, '');
+const API_BASE = rawApiUrl
+  ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`)
+  : '/api';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('markme_token') : null;

@@ -40,25 +40,28 @@ async def google_callback(code: str, response: Response):
         session_token = create_session_token(user_data)
         
         # Set HTTP-only secure cookie and pass token query param for cross-port robustness
+        frontend_base = settings.FRONTEND_URL.strip().rstrip("/")
         session_max_age = settings.SESSION_EXPIRE_HOURS * 3600
-        redirect = RedirectResponse(url=f"{settings.FRONTEND_URL}/drive-setup?token={session_token}")
+        redirect = RedirectResponse(url=f"{frontend_base}/drive-setup?token={session_token}")
         redirect.set_cookie(
             key=settings.SESSION_COOKIE_NAME,
             value=session_token,
             httponly=True,
-            secure=False,  # Set to True in production HTTPS
-            samesite="lax",
+            secure=bool(settings.SESSION_COOKIE_SECURE),
+            samesite=settings.SESSION_COOKIE_SAMESITE,
             max_age=session_max_age,
             expires=session_max_age
         )
         return redirect
     except DomainNotAuthorizedError as e:
+        frontend_base = settings.FRONTEND_URL.strip().rstrip("/")
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error=domain_unauthorized&msg={str(e)}"
+            url=f"{frontend_base}/login?error=domain_unauthorized&msg={str(e)}"
         )
     except Exception as e:
+        frontend_base = settings.FRONTEND_URL.strip().rstrip("/")
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error=oauth_failed&msg={str(e)}"
+            url=f"{frontend_base}/login?error=oauth_failed&msg={str(e)}"
         )
 
 @router.get("/me")
@@ -78,8 +81,8 @@ async def get_me(request: Request, response: Response, user: dict = Depends(get_
             key=settings.SESSION_COOKIE_NAME,
             value=token,
             httponly=True,
-            secure=False,
-            samesite="lax",
+            secure=bool(settings.SESSION_COOKIE_SECURE),
+            samesite=settings.SESSION_COOKIE_SAMESITE,
             max_age=session_max_age,
             expires=session_max_age
         )
@@ -111,5 +114,10 @@ async def logout(request: Request, response: Response):
             token = auth_header.split(" ", 1)[1]
     if token:
         remove_session(token)
-    response.delete_cookie(settings.SESSION_COOKIE_NAME)
+    response.delete_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        httponly=True,
+        secure=bool(settings.SESSION_COOKIE_SECURE),
+        samesite=settings.SESSION_COOKIE_SAMESITE
+    )
     return {"success": True, "message": "Logged out successfully."}

@@ -14,7 +14,8 @@ async def list_folders(user: dict = Depends(get_current_user)):
     """
     drive_svc = DriveService(
         access_token=user.get("access_token"),
-        refresh_token=user.get("refresh_token")
+        refresh_token=user.get("refresh_token"),
+        user_id=user.get("id") or user.get("email")
     )
     try:
         all_folders = drive_svc.list_folders()
@@ -33,7 +34,8 @@ async def resolve_folder(req: FolderResolveRequest, user: dict = Depends(get_cur
     """
     drive_svc = DriveService(
         access_token=user.get("access_token"),
-        refresh_token=user.get("refresh_token")
+        refresh_token=user.get("refresh_token"),
+        user_id=user.get("id") or user.get("email")
     )
     try:
         return drive_svc.resolve_folder(req.input)
@@ -121,7 +123,8 @@ async def list_files(user: dict = Depends(get_current_user)):
         
     drive_svc = DriveService(
         access_token=user.get("access_token"),
-        refresh_token=user.get("refresh_token")
+        refresh_token=user.get("refresh_token"),
+        user_id=user.get("id") or user.get("email")
     )
     try:
         return drive_svc.list_excel_files(folder_id)
