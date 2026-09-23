@@ -9,6 +9,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+*.db
 markme.db
 
 # Node / Frontend
@@ -21,5 +22,6 @@ frontend/.vite/
 .vscode/
 .idea/
 
-# Excel File
+# Excel Files (allow test fixture)
 *.xlsx
+!backend/tests/fixtures/*.xlsx

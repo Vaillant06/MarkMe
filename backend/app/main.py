@@ -29,8 +29,6 @@ if settings.ALLOWED_ORIGINS:
         cleaned = o.strip().rstrip("/")
         if cleaned:
             origins.add(cleaned)
-if settings.DEV_MODE:
-    origins.update(["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"])
 
 app.add_middleware(
     CORSMiddleware,

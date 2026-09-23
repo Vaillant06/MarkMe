@@ -1,12 +1,13 @@
 import shutil
 import tempfile
 import os
+from pathlib import Path
 import openpyxl
 import pytest
 from app.excel.updater import apply_attendance_update, DuplicateSessionError
 from app.excel.parser import extract_students, extract_existing_sessions, find_summary_col
 
-REFERENCE_FILE = "/home/sreenath/Sree/Projects/MarkMe/V Sem B Attendance sheet.xlsx"
+REFERENCE_FILE = str(Path(__file__).parent / "fixtures" / "sample_workbook.xlsx")
 
 @pytest.fixture
 def temp_wb_path():

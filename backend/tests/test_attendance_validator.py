@@ -1,10 +1,11 @@
+from pathlib import Path
 import openpyxl
 import pytest
 from app.excel.parser import extract_students
 from app.attendance.validator import parse_and_validate_suffixes, SuffixValidationError
 from app.attendance.preview import generate_attendance_preview
 
-REFERENCE_FILE = "/home/sreenath/Sree/Projects/MarkMe/V Sem B Attendance sheet.xlsx"
+REFERENCE_FILE = str(Path(__file__).parent / "fixtures" / "sample_workbook.xlsx")
 
 @pytest.fixture
 def students():

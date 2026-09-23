@@ -10,7 +10,7 @@ from app.models.schemas import SubjectStatisticsResponse
 from app.auth.session import create_session_token
 
 WORKBOOK_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../../V Sem B Attendance sheet.xlsx")
+    os.path.join(os.path.dirname(__file__), "fixtures/sample_workbook.xlsx")
 )
 
 @pytest.fixture
@@ -196,9 +196,9 @@ def test_api_statistics_endpoint_authorized():
         "is_authorized": True
     })
 
-    # In dev mode, 'local' file_id resolves to reference workbook
+    # Verify endpoint resolves workbook via mocked DriveService
     res = client.get(
-        "/api/workbooks/local/subjects/UIT3562/statistics?threshold=75.0",
+        "/api/workbooks/test_file_id/subjects/UIT3562/statistics?threshold=75.0",
         headers={"Authorization": f"Bearer {session_token}"}
     )
     assert res.status_code == 200

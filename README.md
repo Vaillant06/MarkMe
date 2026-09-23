@@ -22,8 +22,9 @@ MarkMe is an automated, web-based College Attendance Marking System designed for
    - Alerts faculty with an interactive modal and blocks silent overwrites unless explicitly confirmed.
 6. **Optimistic Concurrency Protection**:
    - Tracks Google Drive file revisions to prevent overwriting updates made concurrently by another faculty member.
-7. **Offline / Development Mock Mode**:
-   - Built-in development mode allows full end-to-end testing with local `.xlsx` files without requiring active Google Cloud API credentials.
+7. **Production Decoupled Cloud Architecture**:
+   - Frontend deployed on Vercel with SPA routing.
+   - High-performance FastAPI backend deployed on Render with Gunicorn and Uvicorn workers.
 
 ---
 
@@ -73,7 +74,8 @@ MarkMe/
 │   │       └── attendance.py           # Preview and commit endpoints
 │   ├── tests/                          # Pytest unit & integration test suite
 │   ├── requirements.txt
-│   └── venv/                           # Python virtual environment
+│   ├── Dockerfile                      # Production container build
+│   └── Procfile                        # Production WSGI/ASGI entrypoint
 ├── frontend/
 │   ├── src/
 │   │   ├── api/client.ts               # Typed fetch client
@@ -90,12 +92,13 @@ MarkMe/
 │   │   ├── types/index.ts              # TypeScript interfaces
 │   │   ├── App.tsx                     # Main flow coordinator
 │   │   └── main.tsx
+│   ├── vercel.json                     # Vercel SPA routing rewrites
 │   ├── package.json
 │   ├── vite.config.ts
 │   └── tailwind.config.js
 ├── .env.example
-├── MarkMe_Documentation.md             # Specification document
-└── V Sem B Attendance sheet.xlsx       # Reference college workbook
+├── Procfile                            # Render entrypoint
+└── README.md
 ```
 
 ---
@@ -109,19 +112,18 @@ Copy the example environment file:
 cp .env.example .env
 ```
 
-To enable live Google OAuth and Google Drive integration, configure your credentials from the [Google Cloud Console](https://console.cloud.google.com/):
+Configure your credentials from the [Google Cloud Console](https://console.cloud.google.com/):
 ```ini
 AUTHORIZED_DOMAIN=ssn.edu.in
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
+GOOGLE_REDIRECT_URI=https://your-backend.onrender.com/google/callback
 SESSION_SECRET=a-secure-random-secret-key
 SESSION_EXPIRE_DAYS=30
 SESSION_EXPIRE_HOURS=720
-DEV_MODE=True
+SESSION_COOKIE_SECURE=True
+FRONTEND_URL=https://your-frontend.vercel.app
 ```
-
-*(Note: In `DEV_MODE=True`, you can test the application offline using the sample workbook immediately without setting up Google Cloud API keys).*
 
 ---
 

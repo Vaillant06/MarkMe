@@ -1,10 +1,11 @@
 import os
+from pathlib import Path
 import openpyxl
 import pytest
 from app.excel.parser import parse_workbook, extract_students, is_subject_sheet, find_summary_col
 from app.excel.session_matcher import parse_session_header, is_duplicate_session, format_session_header
 
-REFERENCE_FILE = "/home/sreenath/Sree/Projects/MarkMe/V Sem B Attendance sheet.xlsx"
+REFERENCE_FILE = str(Path(__file__).parent / "fixtures" / "sample_workbook.xlsx")
 
 def test_workbook_parsing():
     assert os.path.exists(REFERENCE_FILE), "Reference workbook must exist."

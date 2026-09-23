@@ -28,10 +28,10 @@ def test_complete_api_flow():
         "name": "Faculty Instructor",
         "picture": "https://api.dicebear.com/7.x/avataaars/svg?seed=ssn",
         "hd": "ssn.edu.in",
-        "access_token": None,
+        "access_token": "mock_google_token",
         "is_authorized": True,
-        "selected_folder_id": "local_attendance_folder",
-        "selected_folder_name": "📁 College Attendance Folder (Local Dev)",
+        "selected_folder_id": "test_folder_1",
+        "selected_folder_name": "📁 College Attendance Folder",
         "selected_file_id": None,
         "selected_file_name": None
     }

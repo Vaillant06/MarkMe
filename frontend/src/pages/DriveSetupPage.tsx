@@ -80,7 +80,7 @@ export const DriveSetupPage: React.FC<DriveSetupPageProps> = ({
 
   const handleResolveCustomFolder = async () => {
     if (!customInput.trim()) {
-      setError('Please enter a Google Drive folder link, folder ID, or local directory path.');
+      setError('Please enter a Google Drive folder link or folder ID.');
       return;
     }
     setResolvingCustom(true);
@@ -90,7 +90,7 @@ export const DriveSetupPage: React.FC<DriveSetupPageProps> = ({
       await api.selectFolder(resolved.id, resolved.name);
       onFolderSelected(resolved.id, resolved.name);
     } catch (err: any) {
-      setError(err.message || 'Failed to resolve folder. Please check the link, ID, or path.');
+      setError(err.message || 'Failed to resolve folder. Please check the link or folder ID.');
     } finally {
       setResolvingCustom(false);
     }
@@ -386,11 +386,11 @@ export const DriveSetupPage: React.FC<DriveSetupPageProps> = ({
                   </div>
                 </div>
               ) : (
-                /* Custom Link / ID / Local Path Tab */
+                /* Custom Link / ID Tab */
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Folder Link, Google Drive ID, or Local Path
+                      Google Drive Folder Link or Folder ID
                     </label>
                     <div className="relative">
                       <Link className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -398,7 +398,7 @@ export const DriveSetupPage: React.FC<DriveSetupPageProps> = ({
                         type="text"
                         value={customInput}
                         onChange={(e) => setCustomInput(e.target.value)}
-                        placeholder="https://drive.google.com/drive/folders/... or /path/to/folder"
+                        placeholder="https://drive.google.com/drive/folders/... or folder ID"
                         className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-3 text-xs sm:text-sm text-slate-900 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition font-mono"
                       />
                     </div>
@@ -407,17 +407,14 @@ export const DriveSetupPage: React.FC<DriveSetupPageProps> = ({
                   <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-100 text-xs text-blue-900 space-y-2">
                     <div className="flex items-center space-x-1.5 font-semibold">
                       <HelpCircle className="w-4 h-4 text-blue-600" />
-                      <span>How to connect any folder:</span>
+                      <span>How to connect any Google Drive folder:</span>
                     </div>
                     <ul className="list-disc list-inside space-y-1 text-slate-600 pl-1">
                       <li>
                         <strong>Google Drive Link:</strong> Open the folder in Google Drive, copy its URL from your browser address bar, and paste it here.
                       </li>
                       <li>
-                        <strong>Google Drive Folder ID:</strong> Paste the 33-character string from the URL (e.g. <code className="bg-white px-1 py-0.5 rounded">1BxiMVs0XRA5...</code>).
-                      </li>
-                      <li>
-                        <strong>Local Path (Dev / Offline):</strong> Enter the path on your computer (e.g. <code className="bg-white px-1 py-0.5 rounded">/home/sreenath/Templates</code>).
+                        <strong>Google Drive Folder ID:</strong> Paste the unique ID string from the folder URL (e.g. <code className="bg-white px-1 py-0.5 rounded">1BxiMVs0XRA5...</code>).
                       </li>
                     </ul>
                   </div>
