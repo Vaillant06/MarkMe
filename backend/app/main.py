@@ -1,8 +1,12 @@
 import logging
+import socket
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routes import auth, drive, workbooks, attendance
+
+# Set global socket timeout to prevent indefinite hangs in cloud environments
+socket.setdefaulttimeout(60.0)
 
 # Configure audit and app logging
 logging.basicConfig(

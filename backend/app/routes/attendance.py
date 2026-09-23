@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 
 def _preview_sync(content_bytes: bytes, sheet_name: str, date: str, period: str, raw_input: str, entry_mode: str) -> AttendancePreviewResponse:
     wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
+    del content_bytes
     try:
         if sheet_name not in wb.sheetnames:
             raise HTTPException(
@@ -44,6 +45,7 @@ def _preview_sync(content_bytes: bytes, sheet_name: str, date: str, period: str,
 
 def _commit_sync(content_bytes: bytes, sheet_name: str, date: str, period: str, absent_suffixes: list, allow_overwrite: bool, target_col_idx):
     wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
+    del content_bytes
     try:
         col_letter, total_st, present_cnt, absent_cnt = apply_attendance_update(
             wb=wb,
@@ -56,7 +58,10 @@ def _commit_sync(content_bytes: bytes, sheet_name: str, date: str, period: str, 
         )
         out_buf = io.BytesIO()
         wb.save(out_buf)
-        return out_buf.getvalue(), col_letter, total_st, present_cnt, absent_cnt
+        res_bytes = out_buf.getvalue()
+        out_buf.close()
+        del out_buf
+        return res_bytes, col_letter, total_st, present_cnt, absent_cnt
     finally:
         wb.close()
         del wb
@@ -81,6 +86,8 @@ async def preview_attendance(req: AttendancePreviewRequest, user: dict = Depends
         preview_res = await run_in_threadpool(
             _preview_sync, content_bytes, req.sheet_name, req.date, req.period, raw_input, req.entry_mode
         )
+        del content_bytes
+        gc.collect()
         return preview_res
         
     except SuffixValidationError as e:
@@ -91,6 +98,7 @@ async def preview_attendance(req: AttendancePreviewRequest, user: dict = Depends
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception(f"Failed to generate attendance preview: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate attendance preview: {str(e)}"
@@ -102,15 +110,22 @@ async def commit_attendance(req: AttendanceCommitRequest, user: dict = Depends(g
     Applies confirmed attendance to the workbook, updates summary calculations,
     preserves formulas, formatting, and uploads the revised workbook to Google Drive.
     """
+    user_email = user.get("email", "unknown")
+    user_id = user.get("id") or user_email
+    logger.info(f"COMMIT START | User: {user_email} | File: {req.file_id} | Sheet: {req.sheet_name} | Date: {req.date} | Period: {req.period}")
+
     drive_svc = DriveService(
         access_token=user.get("access_token"),
         refresh_token=user.get("refresh_token"),
-        user_id=user.get("id") or user.get("email")
+        user_id=user_id
     )
     try:
+        logger.info(f"Downloading workbook {req.file_id}...")
         content_bytes, file_name, current_rev = await run_in_threadpool(
             drive_svc.download_workbook, req.file_id
         )
+        logger.info(f"Downloaded workbook {file_name} ({len(content_bytes)} bytes). Updating attendance...")
+
         out_bytes, col_letter, total_st, present_cnt, absent_cnt = await run_in_threadpool(
             _commit_sync,
             content_bytes,
@@ -121,7 +136,10 @@ async def commit_attendance(req: AttendanceCommitRequest, user: dict = Depends(g
             req.allow_overwrite,
             req.target_col_idx
         )
+        del content_bytes
+        gc.collect()
         
+        logger.info(f"Attendance updated locally ({len(out_bytes)} bytes). Uploading revision to Google Drive...")
         # Upload revised workbook to Google Drive with concurrency check
         new_rev = await run_in_threadpool(
             drive_svc.upload_workbook_revision,
@@ -129,14 +147,15 @@ async def commit_attendance(req: AttendanceCommitRequest, user: dict = Depends(g
             out_bytes,
             req.head_revision_id
         )
+        del out_bytes
+        gc.collect()
         
         # Audit Log Entry
-        user_email = user.get("email", "unknown")
         logger.info(
             f"AUDIT | User: {user_email} | File: {file_name} | Sheet: {req.sheet_name} | "
             f"Date: {req.date} | Period: {req.period} | Total: {total_st} | "
             f"Present: {present_cnt} | Absent: {absent_cnt} | Column: {col_letter} | "
-            f"Timestamp: {datetime.utcnow().isoformat()}"
+            f"Timestamp: {datetime.utcnow().isoformat()} | Rev: {new_rev}"
         )
         
         return AttendanceCommitResponse(
@@ -154,6 +173,7 @@ async def commit_attendance(req: AttendanceCommitRequest, user: dict = Depends(g
         )
         
     except DuplicateSessionError as e:
+        logger.warning(f"Duplicate session error committing attendance: {e}")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -164,11 +184,19 @@ async def commit_attendance(req: AttendanceCommitRequest, user: dict = Depends(g
             }
         )
     except DriveConcurrencyError as e:
+        logger.warning(f"Drive concurrency error committing attendance: {e}")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"message": str(e), "is_concurrency_conflict": True}
         )
     except ExcelUpdateError as e:
+        logger.warning(f"Excel update error committing attendance: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except ValueError as e:
+        logger.warning(f"Validation error committing attendance: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
@@ -176,6 +204,7 @@ async def commit_attendance(req: AttendanceCommitRequest, user: dict = Depends(g
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception(f"Unexpected error committing attendance for file {req.file_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to commit attendance: {str(e)}"

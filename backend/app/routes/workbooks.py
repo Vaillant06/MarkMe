@@ -56,6 +56,8 @@ async def get_workbook_details(file_id: str, user: dict = Depends(get_current_us
         details = await run_in_threadpool(
             _parse_workbook_sync, content_bytes, file_id, file_name
         )
+        del content_bytes
+        gc.collect()
         
         user_id = user.get("id") or user.get("email")
         if user_id:
@@ -125,6 +127,8 @@ async def get_subject_statistics(
         stats = await run_in_threadpool(
             _calculate_stats_sync, content_bytes, sheet_name, threshold, file_id, file_name
         )
+        del content_bytes
+        gc.collect()
         return stats
     except FileNotFoundError:
         raise HTTPException(

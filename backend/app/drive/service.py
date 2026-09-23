@@ -361,12 +361,19 @@ class DriveService:
         # 3. Google Drive file
         service = self._get_service()
 
+        current_meta = service.files().get(
+            fileId=file_id,
+            fields="headRevisionId, mimeType",
+            supportsAllDrives=True
+        ).execute()
+
+        mime_type = current_meta.get("mimeType", "")
+        if mime_type == "application/vnd.google-apps.spreadsheet":
+            raise ValueError(
+                "This file is a native Google Sheet. MarkMe requires standard Excel (.xlsx) workbooks to preserve all formulas, conditional formatting, and attendance registers. Please upload your workbook as an .xlsx file to Google Drive."
+            )
+
         if head_revision_id:
-            current_meta = service.files().get(
-                fileId=file_id,
-                fields="headRevisionId",
-                supportsAllDrives=True
-            ).execute()
             current_rev = current_meta.get("headRevisionId")
             if current_rev and current_rev != head_revision_id:
                 raise DriveConcurrencyError(
@@ -376,7 +383,7 @@ class DriveService:
         media = MediaIoBaseUpload(
             io.BytesIO(file_bytes),
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            resumable=True
+            resumable=False
         )
 
         updated_file = service.files().update(
