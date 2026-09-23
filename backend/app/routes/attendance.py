@@ -1,8 +1,10 @@
 import io
+import gc
 import logging
 from datetime import datetime
 import openpyxl
 from fastapi import APIRouter, Depends, HTTPException, status
+from starlette.concurrency import run_in_threadpool
 from app.models.schemas import (
     AttendancePreviewRequest,
     AttendancePreviewResponse,
@@ -18,6 +20,48 @@ from app.excel.updater import apply_attendance_update, DuplicateSessionError, Ex
 logger = logging.getLogger("attendance_audit")
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 
+def _preview_sync(content_bytes: bytes, sheet_name: str, date: str, period: str, raw_input: str, entry_mode: str) -> AttendancePreviewResponse:
+    wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
+    try:
+        if sheet_name not in wb.sheetnames:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Worksheet '{sheet_name}' not found in workbook."
+            )
+        ws = wb[sheet_name]
+        return generate_attendance_preview(
+            ws=ws,
+            sheet_name=sheet_name,
+            date=date,
+            period=period,
+            student_input=raw_input,
+            entry_mode=entry_mode
+        )
+    finally:
+        wb.close()
+        del wb
+        gc.collect()
+
+def _commit_sync(content_bytes: bytes, sheet_name: str, date: str, period: str, absent_suffixes: list, allow_overwrite: bool, target_col_idx):
+    wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
+    try:
+        col_letter, total_st, present_cnt, absent_cnt = apply_attendance_update(
+            wb=wb,
+            sheet_name=sheet_name,
+            date=date,
+            period=period,
+            absent_suffixes=absent_suffixes,
+            allow_overwrite=allow_overwrite,
+            target_col_idx=target_col_idx
+        )
+        out_buf = io.BytesIO()
+        wb.save(out_buf)
+        return out_buf.getvalue(), col_letter, total_st, present_cnt, absent_cnt
+    finally:
+        wb.close()
+        del wb
+        gc.collect()
+
 @router.post("/preview", response_model=AttendancePreviewResponse)
 async def preview_attendance(req: AttendancePreviewRequest, user: dict = Depends(get_current_user)):
     """
@@ -30,27 +74,13 @@ async def preview_attendance(req: AttendancePreviewRequest, user: dict = Depends
         user_id=user.get("id") or user.get("email")
     )
     try:
-        content_bytes, _, _ = drive_svc.download_workbook(req.file_id)
-        wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
-        
-        if req.sheet_name not in wb.sheetnames:
-            wb.close()
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Worksheet '{req.sheet_name}' not found in workbook."
-            )
-            
-        ws = wb[req.sheet_name]
-        raw_input = req.student_input if req.student_input is not None else (req.absent_input or "")
-        preview_res = generate_attendance_preview(
-            ws=ws,
-            sheet_name=req.sheet_name,
-            date=req.date,
-            period=req.period,
-            student_input=raw_input,
-            entry_mode=req.entry_mode
+        content_bytes, _, _ = await run_in_threadpool(
+            drive_svc.download_workbook, req.file_id
         )
-        wb.close()
+        raw_input = req.student_input if req.student_input is not None else (req.absent_input or "")
+        preview_res = await run_in_threadpool(
+            _preview_sync, content_bytes, req.sheet_name, req.date, req.period, raw_input, req.entry_mode
+        )
         return preview_res
         
     except SuffixValidationError as e:
@@ -78,30 +108,26 @@ async def commit_attendance(req: AttendanceCommitRequest, user: dict = Depends(g
         user_id=user.get("id") or user.get("email")
     )
     try:
-        content_bytes, file_name, current_rev = drive_svc.download_workbook(req.file_id)
-        wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
-        
-        col_letter, total_st, present_cnt, absent_cnt = apply_attendance_update(
-            wb=wb,
-            sheet_name=req.sheet_name,
-            date=req.date,
-            period=req.period,
-            absent_suffixes=req.absent_suffixes,
-            allow_overwrite=req.allow_overwrite,
-            target_col_idx=req.target_col_idx
+        content_bytes, file_name, current_rev = await run_in_threadpool(
+            drive_svc.download_workbook, req.file_id
+        )
+        out_bytes, col_letter, total_st, present_cnt, absent_cnt = await run_in_threadpool(
+            _commit_sync,
+            content_bytes,
+            req.sheet_name,
+            req.date,
+            req.period,
+            req.absent_suffixes,
+            req.allow_overwrite,
+            req.target_col_idx
         )
         
-        # Save updated workbook into memory buffer
-        out_buf = io.BytesIO()
-        wb.save(out_buf)
-        wb.close()
-        out_bytes = out_buf.getvalue()
-        
         # Upload revised workbook to Google Drive with concurrency check
-        new_rev = drive_svc.upload_workbook_revision(
-            file_id=req.file_id,
-            file_bytes=out_bytes,
-            head_revision_id=req.head_revision_id
+        new_rev = await run_in_threadpool(
+            drive_svc.upload_workbook_revision,
+            req.file_id,
+            out_bytes,
+            req.head_revision_id
         )
         
         # Audit Log Entry

@@ -1,6 +1,8 @@
 import io
+import gc
 import openpyxl
 from fastapi import APIRouter, Depends, HTTPException, status
+from starlette.concurrency import run_in_threadpool
 from app.models.schemas import WorkbookDetails, WorkbookSelectRequest, SubjectStatisticsResponse
 from app.auth.dependencies import get_current_user
 from app.auth.session import update_session_data
@@ -9,6 +11,30 @@ from app.excel.parser import parse_workbook
 from app.excel.statistics import calculate_subject_statistics
 
 router = APIRouter(prefix="/api/workbooks", tags=["workbooks"])
+
+def _parse_workbook_sync(content_bytes: bytes, file_id: str, file_name: str) -> WorkbookDetails:
+    wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
+    try:
+        return parse_workbook(wb, file_id=file_id, file_name=file_name)
+    finally:
+        wb.close()
+        del wb
+        gc.collect()
+
+def _calculate_stats_sync(content_bytes: bytes, sheet_name: str, threshold: float, file_id: str, file_name: str):
+    wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=True)
+    try:
+        return calculate_subject_statistics(
+            wb=wb,
+            sheet_name=sheet_name,
+            threshold=threshold,
+            file_id=file_id,
+            file_name=file_name
+        )
+    finally:
+        wb.close()
+        del wb
+        gc.collect()
 
 @router.get("/{file_id}/details", response_model=WorkbookDetails)
 async def get_workbook_details(file_id: str, user: dict = Depends(get_current_user)):
@@ -23,12 +49,13 @@ async def get_workbook_details(file_id: str, user: dict = Depends(get_current_us
         user_id=user.get("id") or user.get("email")
     )
     try:
-        content_bytes, file_name, head_rev = drive_svc.download_workbook(file_id)
+        content_bytes, file_name, head_rev = await run_in_threadpool(
+            drive_svc.download_workbook, file_id
+        )
         
-        # Load in openpyxl without data_only to retain formulas
-        wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
-        details = parse_workbook(wb, file_id=file_id, file_name=file_name)
-        wb.close()
+        details = await run_in_threadpool(
+            _parse_workbook_sync, content_bytes, file_id, file_name
+        )
         
         user_id = user.get("id") or user.get("email")
         if user_id:
@@ -92,16 +119,12 @@ async def get_subject_statistics(
         user_id=user.get("id") or user.get("email")
     )
     try:
-        content_bytes, file_name, _ = drive_svc.download_workbook(file_id)
-        wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=True)
-        stats = calculate_subject_statistics(
-            wb=wb,
-            sheet_name=sheet_name,
-            threshold=threshold,
-            file_id=file_id,
-            file_name=file_name
+        content_bytes, file_name, _ = await run_in_threadpool(
+            drive_svc.download_workbook, file_id
         )
-        wb.close()
+        stats = await run_in_threadpool(
+            _calculate_stats_sync, content_bytes, sheet_name, threshold, file_id, file_name
+        )
         return stats
     except FileNotFoundError:
         raise HTTPException(

@@ -26,5 +26,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 
 EXPOSE ${PORT}
 
-# Run production ASGI server with gunicorn + uvicorn workers
-CMD exec gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app --bind 0.0.0.0:${PORT}
+# Run production ASGI server with gunicorn + uvicorn workers (1 worker, 4 threads, 120s timeout for resource constrained hosts)
+CMD exec gunicorn -w 1 --threads 4 -k uvicorn.workers.UvicornWorker --timeout 120 app.main:app --bind 0.0.0.0:${PORT}
