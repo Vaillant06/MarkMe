@@ -122,7 +122,7 @@ async def commit_attendance(req: AttendanceCommitRequest, user: dict = Depends(g
     try:
         logger.info(f"Downloading workbook {req.file_id}...")
         content_bytes, file_name, current_rev = await run_in_threadpool(
-            drive_svc.download_workbook, req.file_id
+            drive_svc.download_workbook, req.file_id, True
         )
         logger.info(f"Downloaded workbook {file_name} ({len(content_bytes)} bytes). Updating attendance...")
 

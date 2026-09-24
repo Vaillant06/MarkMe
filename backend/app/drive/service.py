@@ -1,14 +1,28 @@
 import io
 import re
-from typing import List, Optional, Tuple
+import time
+from typing import List, Optional, Tuple, Dict
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseUpload
 from app.config import settings
 from app.models.schemas import DriveFolder, DriveFile
 
 class DriveConcurrencyError(Exception):
     pass
+
+# Short-lived in-memory workbook cache: file_id -> (content_bytes, file_name, head_rev, timestamp)
+_WORKBOOK_CACHE: Dict[str, Tuple[bytes, str, str, float]] = {}
+CACHE_TTL_SECONDS = 120.0  # 2 minutes
+
+def invalidate_workbook_cache(file_id: Optional[str] = None):
+    """
+    Invalidates cached workbook bytes. If file_id is None, clears all cached entries.
+    """
+    if file_id:
+        _WORKBOOK_CACHE.pop(file_id, None)
+    else:
+        _WORKBOOK_CACHE.clear()
 
 class DriveService:
     def __init__(self, access_token: Optional[str] = None, refresh_token: Optional[str] = None, user_id: Optional[str] = None):
@@ -155,11 +169,19 @@ class DriveService:
         ]
         return files
 
-    def download_workbook(self, file_id: str) -> Tuple[bytes, str, str]:
+    def download_workbook(self, file_id: str, force_refresh: bool = False) -> Tuple[bytes, str, str]:
         """
         Downloads workbook bytes from Google Drive.
+        Uses a short-lived in-memory cache (120s TTL) for repeated reads (e.g. preview, statistics),
+        bypassing Google Drive network latency.
         Returns: (file_bytes, file_name, head_revision_id)
         """
+        now = time.time()
+        if not force_refresh and file_id in _WORKBOOK_CACHE:
+            cached_bytes, cached_name, cached_rev, cached_time = _WORKBOOK_CACHE[file_id]
+            if now - cached_time < CACHE_TTL_SECONDS:
+                return cached_bytes, cached_name, cached_rev
+
         if not self.access_token:
             raise FileNotFoundError(f"Drive access token missing for file: {file_id}")
 
@@ -183,14 +205,12 @@ class DriveService:
         else:
             request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
 
-        buffer = io.BytesIO()
-        downloader = MediaIoBaseDownload(buffer, request)
-        done = False
-        while not done:
-            _, done = downloader.next_chunk()
+        raw_content = request.execute()
+        content_bytes = raw_content if isinstance(raw_content, bytes) else bytes(raw_content)
 
-        buffer.seek(0)
-        return buffer.getvalue(), file_name, head_rev
+        # Store in fast in-memory cache
+        _WORKBOOK_CACHE[file_id] = (content_bytes, file_name, head_rev, now)
+        return content_bytes, file_name, head_rev
 
     def upload_workbook_revision(
         self,
@@ -239,4 +259,7 @@ class DriveService:
             supportsAllDrives=True
         ).execute()
 
-        return updated_file.get("headRevisionId", "updated")
+        new_rev = updated_file.get("headRevisionId", "updated")
+        # Invalidate cached workbook so next read fetches the newly committed revision
+        invalidate_workbook_cache(file_id)
+        return new_rev

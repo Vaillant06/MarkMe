@@ -41,7 +41,7 @@ def mock_drive_service(monkeypatch):
             )
         ]
 
-    def mock_download_workbook(self, file_id):
+    def mock_download_workbook(self, file_id, force_refresh=False):
         if "non_existent" in file_id:
             raise FileNotFoundError(f"Workbook with ID '{file_id}' not found.")
         with open(FIXTURE_PATH, "rb") as f:
