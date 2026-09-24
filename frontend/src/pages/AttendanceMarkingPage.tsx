@@ -27,6 +27,8 @@ import {
 
 interface AttendanceMarkingPageProps {
   file: DriveFile;
+  cachedDetails?: WorkbookDetails | null;
+  onDetailsLoaded?: (details: WorkbookDetails) => void;
   onBackToFileSelect: () => void;
   onNavigateToStatistics: (currentSubject?: string) => void;
   onCommitSuccess: (res: AttendanceCommitResponse) => void;
@@ -34,12 +36,15 @@ interface AttendanceMarkingPageProps {
 
 export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
   file,
+  cachedDetails,
+  onDetailsLoaded,
   onBackToFileSelect,
   onNavigateToStatistics,
   onCommitSuccess,
 }) => {
-  const [details, setDetails] = useState<WorkbookDetails | null>(null);
-  const [loading, setLoading] = useState(true);
+  const isCacheValid = Boolean(cachedDetails && cachedDetails.file_id === file.id);
+  const [details, setDetails] = useState<WorkbookDetails | null>(isCacheValid ? cachedDetails! : null);
+  const [loading, setLoading] = useState(!isCacheValid);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const draft = useMemo(() => getAttendanceDraft(file.id), [file.id]);
@@ -72,7 +77,22 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
 
   useEffect(() => {
-    loadWorkbook();
+    if (cachedDetails && cachedDetails.file_id === file.id) {
+      setDetails(cachedDetails);
+      setLoading(false);
+      if (cachedDetails.subjects.length > 0 && !selectedSheet) {
+        const savedSheet = draft?.selectedSheet || selectedSheet;
+        const matchingSubject = savedSheet && cachedDetails.subjects.find((s) => s.sheet_name === savedSheet);
+        if (matchingSubject) {
+          setSelectedSheet(matchingSubject.sheet_name);
+        } else {
+          const defaultSub = cachedDetails.subjects.find((s) => s.code === 'UIT3562') || cachedDetails.subjects[0];
+          setSelectedSheet(defaultSub.sheet_name);
+        }
+      }
+    } else {
+      loadWorkbook();
+    }
   }, [file.id]);
 
   // Persist form inputs on every change to retain across reloads
@@ -92,6 +112,7 @@ export const AttendanceMarkingPage: React.FC<AttendanceMarkingPageProps> = ({
     try {
       const data = await api.getWorkbookDetails(file.id);
       setDetails(data);
+      onDetailsLoaded?.(data);
       if (data.subjects.length > 0) {
         // Restore selected sheet from draft if valid, otherwise default to UIT3562 or first
         const savedSheet = draft?.selectedSheet || selectedSheet;

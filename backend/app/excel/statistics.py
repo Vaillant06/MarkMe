@@ -74,32 +74,41 @@ def calculate_subject_statistics(
             sessions=[]
         )
 
-    # Process each student's attendance records
+    # Process each student's attendance records in a single pass across sessions
     total_present = 0
     total_absent = 0
     total_unrecorded = 0
     unexpected_values_count = 0
     student_percentages: List[float] = []
 
+    num_sessions = len(sessions)
+    session_present = [0] * num_sessions
+    session_absent = [0] * num_sessions
+    session_unrecorded = [0] * num_sessions
+
     for student in students:
         p_count = 0
         a_count = 0
         unrec_count = 0
 
-        for session in sessions:
+        for s_idx, session in enumerate(sessions):
             val = ws.cell(student.row, session.col_idx).value
             if val is None or str(val).strip() == "":
                 unrec_count += 1
+                session_unrecorded[s_idx] += 1
             else:
                 norm_val = str(val).strip().upper()
                 if norm_val == "P":
                     p_count += 1
+                    session_present[s_idx] += 1
                 elif norm_val == "A":
                     a_count += 1
+                    session_absent[s_idx] += 1
                 else:
                     # Unexpected value (neither blank nor standard P/A)
                     unexpected_values_count += 1
                     unrec_count += 1
+                    session_unrecorded[s_idx] += 1
 
         total_present += p_count
         total_absent += a_count
@@ -141,26 +150,12 @@ def calculate_subject_statistics(
         present_percentage = 0.0
         absent_percentage = 0.0
 
-    # Session-by-session trend and summary items
+    # Session-by-session trend and summary items (built directly from single-pass counts)
     session_items: List[SessionStatisticsItem] = []
-    for session in sessions:
-        sess_p = 0
-        sess_a = 0
-        sess_unrec = 0
-
-        for student in students:
-            val = ws.cell(student.row, session.col_idx).value
-            if val is None or str(val).strip() == "":
-                sess_unrec += 1
-            else:
-                norm_val = str(val).strip().upper()
-                if norm_val == "P":
-                    sess_p += 1
-                elif norm_val == "A":
-                    sess_a += 1
-                else:
-                    sess_unrec += 1
-
+    for s_idx, session in enumerate(sessions):
+        sess_p = session_present[s_idx]
+        sess_a = session_absent[s_idx]
+        sess_unrec = session_unrecorded[s_idx]
         sess_recorded = sess_p + sess_a
         if sess_recorded > 0:
             sess_pct = round((sess_p / sess_recorded) * 100.0, 1)

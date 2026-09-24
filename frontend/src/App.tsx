@@ -7,7 +7,7 @@ import { AttendanceMarkingPage } from './pages/AttendanceMarkingPage';
 import { StatisticsPage } from './pages/StatisticsPage';
 import { SuccessView } from './components/SuccessView';
 import { api } from './api/client';
-import { UserProfile, DriveFile, AttendanceCommitResponse } from './types';
+import { UserProfile, DriveFile, AttendanceCommitResponse, WorkbookDetails } from './types';
 import {
   AppStage,
   STORAGE_KEYS,
@@ -25,6 +25,7 @@ export const App: React.FC = () => {
   const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>();
   const [selectedFolderName, setSelectedFolderName] = useState<string | undefined>();
   const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null);
+  const [cachedWorkbookDetails, setCachedWorkbookDetails] = useState<WorkbookDetails | null>(null);
   const [commitResult, setCommitResult] = useState<AttendanceCommitResponse | null>(null);
 
   // App Navigation Stage: 'AUTH' | 'DRIVE_SETUP' | 'FILE_SELECT' | 'MARK_ATTENDANCE' | 'SUCCESS'
@@ -60,6 +61,7 @@ export const App: React.FC = () => {
           } else {
             try {
               const wb = await api.getWorkbookDetails(fileId);
+              setCachedWorkbookDetails(wb);
               const restoredFile: DriveFile = {
                 id: fileId,
                 name: wb.file_name,
@@ -82,9 +84,11 @@ export const App: React.FC = () => {
         if (fileId) {
           if (selectedFile && selectedFile.id === fileId) {
             setStage('MARK_ATTENDANCE');
+            setPersistedWorkflowState({ step: 'MARK_ATTENDANCE', fileId });
           } else {
             try {
               const wb = await api.getWorkbookDetails(fileId);
+              setCachedWorkbookDetails(wb);
               const restoredFile: DriveFile = {
                 id: fileId,
                 name: wb.file_name,
@@ -164,6 +168,7 @@ export const App: React.FC = () => {
         try {
           // Verify and retrieve fresh workbook details from backend/Drive
           const wb = await api.getWorkbookDetails(targetFileId);
+          setCachedWorkbookDetails(wb);
           const restoredFile: DriveFile = {
             id: targetFileId,
             name:
@@ -265,6 +270,7 @@ export const App: React.FC = () => {
     setSelectedFolderId(undefined);
     setSelectedFolderName(undefined);
     setSelectedFile(null);
+    setCachedWorkbookDetails(null);
     setCommitResult(null);
     setWorkflowNotice(null);
     setStage('AUTH');
@@ -290,6 +296,7 @@ export const App: React.FC = () => {
     setSelectedFolderId(folderId);
     setSelectedFolderName(folderName);
     setSelectedFile(null);
+    setCachedWorkbookDetails(null);
     setWorkflowNotice(null);
     setPersistedWorkflowState({
       folderId,
@@ -304,6 +311,7 @@ export const App: React.FC = () => {
 
   const handleFileSelected = (file: DriveFile) => {
     setSelectedFile(file);
+    setCachedWorkbookDetails(null);
     setWorkflowNotice(null);
     setPersistedWorkflowState({
       fileId: file.id,
@@ -431,6 +439,8 @@ export const App: React.FC = () => {
         {stage === 'MARK_ATTENDANCE' && selectedFile && (
           <AttendanceMarkingPage
             file={selectedFile}
+            cachedDetails={cachedWorkbookDetails}
+            onDetailsLoaded={setCachedWorkbookDetails}
             onBackToFileSelect={handleBackToFileSelect}
             onNavigateToStatistics={handleNavigateToStatistics}
             onCommitSuccess={handleCommitSuccess}
@@ -440,6 +450,8 @@ export const App: React.FC = () => {
         {stage === 'STATISTICS' && selectedFile && (
           <StatisticsPage
             file={selectedFile}
+            cachedWorkbookDetails={cachedWorkbookDetails}
+            onWorkbookDetailsLoaded={setCachedWorkbookDetails}
             initialSubject={parseUrlNavigation().subject || getPersistedWorkflowState().subject || undefined}
             onBackToAttendance={handleBackToAttendance}
           />

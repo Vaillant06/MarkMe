@@ -10,31 +10,41 @@ from app.drive.service import DriveService
 from app.excel.parser import parse_workbook
 from app.excel.statistics import calculate_subject_statistics
 
+import threading
+
 router = APIRouter(prefix="/api/workbooks", tags=["workbooks"])
 
+# Global Excel lock to ensure memory-constrained servers (e.g. Render 512MB RAM)
+# never parse multiple large openpyxl workbooks concurrently in different worker threads.
+_EXCEL_LOCK = threading.Lock()
+
 def _parse_workbook_sync(content_bytes: bytes, file_id: str, file_name: str) -> WorkbookDetails:
-    wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
-    try:
-        return parse_workbook(wb, file_id=file_id, file_name=file_name)
-    finally:
-        wb.close()
-        del wb
-        gc.collect()
+    with _EXCEL_LOCK:
+        wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
+        del content_bytes
+        try:
+            return parse_workbook(wb, file_id=file_id, file_name=file_name)
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 def _calculate_stats_sync(content_bytes: bytes, sheet_name: str, threshold: float, file_id: str, file_name: str):
-    wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=True)
-    try:
-        return calculate_subject_statistics(
-            wb=wb,
-            sheet_name=sheet_name,
-            threshold=threshold,
-            file_id=file_id,
-            file_name=file_name
-        )
-    finally:
-        wb.close()
-        del wb
-        gc.collect()
+    with _EXCEL_LOCK:
+        wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
+        del content_bytes
+        try:
+            return calculate_subject_statistics(
+                wb=wb,
+                sheet_name=sheet_name,
+                threshold=threshold,
+                file_id=file_id,
+                file_name=file_name
+            )
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 @router.get("/{file_id}/details", response_model=WorkbookDetails)
 async def get_workbook_details(file_id: str, user: dict = Depends(get_current_user)):

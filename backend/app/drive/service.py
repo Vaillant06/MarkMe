@@ -14,6 +14,7 @@ class DriveConcurrencyError(Exception):
 # Short-lived in-memory workbook cache: file_id -> (content_bytes, file_name, head_rev, timestamp)
 _WORKBOOK_CACHE: Dict[str, Tuple[bytes, str, str, float]] = {}
 CACHE_TTL_SECONDS = 120.0  # 2 minutes
+MAX_CACHE_ENTRIES = 2
 
 def invalidate_workbook_cache(file_id: Optional[str] = None):
     """
@@ -208,7 +209,10 @@ class DriveService:
         raw_content = request.execute()
         content_bytes = raw_content if isinstance(raw_content, bytes) else bytes(raw_content)
 
-        # Store in fast in-memory cache
+        # Store in fast in-memory cache, bounding size to prevent memory spikes
+        if len(_WORKBOOK_CACHE) >= MAX_CACHE_ENTRIES:
+            oldest_key = min(_WORKBOOK_CACHE.keys(), key=lambda k: _WORKBOOK_CACHE[k][3])
+            _WORKBOOK_CACHE.pop(oldest_key, None)
         _WORKBOOK_CACHE[file_id] = (content_bytes, file_name, head_rev, now)
         return content_bytes, file_name, head_rev
 

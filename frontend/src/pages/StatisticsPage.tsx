@@ -31,6 +31,8 @@ import {
 interface StatisticsPageProps {
   file: DriveFile;
   initialSubject?: string;
+  cachedWorkbookDetails?: WorkbookDetails | null;
+  onWorkbookDetailsLoaded?: (details: WorkbookDetails) => void;
   onBackToAttendance: (selectedSubject?: string) => void;
 }
 
@@ -40,11 +42,16 @@ type SortOrder = 'asc' | 'desc';
 export const StatisticsPage: React.FC<StatisticsPageProps> = ({
   file,
   initialSubject,
+  cachedWorkbookDetails,
+  onWorkbookDetailsLoaded,
   onBackToAttendance,
 }) => {
+  const isCacheValid = Boolean(cachedWorkbookDetails && cachedWorkbookDetails.file_id === file.id);
   // Workbook details for subject dropdown
-  const [workbookDetails, setWorkbookDetails] = useState<WorkbookDetails | null>(null);
-  const [detailsLoading, setDetailsLoading] = useState(true);
+  const [workbookDetails, setWorkbookDetails] = useState<WorkbookDetails | null>(
+    isCacheValid ? cachedWorkbookDetails! : null
+  );
+  const [detailsLoading, setDetailsLoading] = useState(!isCacheValid);
 
   // Selected subject sheet
   const [selectedSheet, setSelectedSheet] = useState<string>(() => {
@@ -62,6 +69,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
   const [stats, setStats] = useState<SubjectStatisticsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState<number>(0);
 
   // Table sorting state
   const [sortField, setSortField] = useState<SortField>('date');
@@ -72,18 +80,33 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
   const [selectedSession, setSelectedSession] = useState<SessionStatisticsItem | null>(null);
   const activeSession = hoveredSession || selectedSession;
 
-  // 1. Load workbook details to populate subject dropdown
+  // 1. Load workbook details to populate subject dropdown (skip if provided via cache)
   useEffect(() => {
     let isMounted = true;
+
+    if (cachedWorkbookDetails && cachedWorkbookDetails.file_id === file.id) {
+      setWorkbookDetails(cachedWorkbookDetails);
+      setDetailsLoading(false);
+      if (cachedWorkbookDetails.subjects.length > 0) {
+        const exists = cachedWorkbookDetails.subjects.some((s) => s.sheet_name === selectedSheet);
+        if (!selectedSheet || !exists) {
+          const preferred =
+            cachedWorkbookDetails.subjects.find((s) => s.code === 'UIT3562') || cachedWorkbookDetails.subjects[0];
+          setSelectedSheet(preferred.sheet_name);
+        }
+      }
+      return;
+    }
+
     const loadWorkbook = async () => {
       setDetailsLoading(true);
       try {
         const wb = await api.getWorkbookDetails(file.id);
         if (!isMounted) return;
         setWorkbookDetails(wb);
+        onWorkbookDetailsLoaded?.(wb);
 
         if (wb.subjects.length > 0) {
-          // If no selected sheet or current selection not in workbook, default to first or UIT3562
           const exists = wb.subjects.some((s) => s.sheet_name === selectedSheet);
           if (!selectedSheet || !exists) {
             const preferred =
@@ -93,7 +116,10 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
         }
       } catch (err: any) {
         if (!isMounted) return;
-        setError(err.message || 'Failed to load workbook details.');
+        const msg = err.message === 'Failed to fetch'
+          ? 'Unable to connect to MarkMe server. Please check your network connection and retry.'
+          : (err.message || 'Failed to load workbook details.');
+        setError(msg);
       } finally {
         if (isMounted) setDetailsLoading(false);
       }
@@ -103,9 +129,9 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [file.id]);
+  }, [file.id, cachedWorkbookDetails, retryCount]);
 
-  // 2. Whenever selectedSheet or threshold changes, fetch statistics
+  // 2. Whenever selectedSheet, threshold, or retryCount changes, fetch statistics
   useEffect(() => {
     if (!selectedSheet) return;
 
@@ -114,7 +140,6 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
       setLoading(true);
       setError(null);
       try {
-        // Persist selected subject in workflow state and update URL
         setPersistedWorkflowState({ subject: selectedSheet });
 
         const data = await api.getSubjectStatistics(file.id, selectedSheet, threshold);
@@ -122,7 +147,10 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
         setStats(data);
       } catch (err: any) {
         if (!isMounted) return;
-        setError(err.message || 'Failed to calculate subject statistics.');
+        const msg = err.message === 'Failed to fetch'
+          ? 'Unable to connect to MarkMe server. Please check your network connection and retry.'
+          : (err.message || 'Failed to calculate subject statistics.');
+        setError(msg);
         setStats(null);
       } finally {
         if (isMounted) setLoading(false);
@@ -133,7 +161,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [file.id, selectedSheet, threshold]);
+  }, [file.id, selectedSheet, threshold, retryCount]);
 
   // Handle subject change from dropdown
   const handleSubjectChange = (newSheet: string) => {
@@ -325,8 +353,8 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({
                 <p className="font-bold text-sm">Unable to load statistics</p>
                 <p className="mt-0.5">{error}</p>
                 <button
-                  onClick={() => setSelectedSheet(selectedSheet)}
-                  className="mt-3 px-3 py-1.5 bg-white border border-rose-300 rounded-lg text-xs font-semibold text-rose-800 hover:bg-rose-100 flex items-center space-x-1"
+                  onClick={() => setRetryCount((c) => c + 1)}
+                  className="mt-3 px-3 py-1.5 bg-white border border-rose-300 rounded-lg text-xs font-semibold text-rose-800 hover:bg-rose-100 flex items-center space-x-1 cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Retry Calculation</span>

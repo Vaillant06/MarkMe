@@ -17,55 +17,59 @@ from app.attendance.preview import generate_attendance_preview
 from app.attendance.validator import SuffixValidationError
 from app.excel.updater import apply_attendance_update, DuplicateSessionError, ExcelUpdateError
 
+from app.routes.workbooks import _EXCEL_LOCK
+
 logger = logging.getLogger("attendance_audit")
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 
 def _preview_sync(content_bytes: bytes, sheet_name: str, date: str, period: str, raw_input: str, entry_mode: str) -> AttendancePreviewResponse:
-    wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
-    del content_bytes
-    try:
-        if sheet_name not in wb.sheetnames:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Worksheet '{sheet_name}' not found in workbook."
+    with _EXCEL_LOCK:
+        wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
+        del content_bytes
+        try:
+            if sheet_name not in wb.sheetnames:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Worksheet '{sheet_name}' not found in workbook."
+                )
+            ws = wb[sheet_name]
+            return generate_attendance_preview(
+                ws=ws,
+                sheet_name=sheet_name,
+                date=date,
+                period=period,
+                student_input=raw_input,
+                entry_mode=entry_mode
             )
-        ws = wb[sheet_name]
-        return generate_attendance_preview(
-            ws=ws,
-            sheet_name=sheet_name,
-            date=date,
-            period=period,
-            student_input=raw_input,
-            entry_mode=entry_mode
-        )
-    finally:
-        wb.close()
-        del wb
-        gc.collect()
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 def _commit_sync(content_bytes: bytes, sheet_name: str, date: str, period: str, absent_suffixes: list, allow_overwrite: bool, target_col_idx):
-    wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
-    del content_bytes
-    try:
-        col_letter, total_st, present_cnt, absent_cnt = apply_attendance_update(
-            wb=wb,
-            sheet_name=sheet_name,
-            date=date,
-            period=period,
-            absent_suffixes=absent_suffixes,
-            allow_overwrite=allow_overwrite,
-            target_col_idx=target_col_idx
-        )
-        out_buf = io.BytesIO()
-        wb.save(out_buf)
-        res_bytes = out_buf.getvalue()
-        out_buf.close()
-        del out_buf
-        return res_bytes, col_letter, total_st, present_cnt, absent_cnt
-    finally:
-        wb.close()
-        del wb
-        gc.collect()
+    with _EXCEL_LOCK:
+        wb = openpyxl.load_workbook(io.BytesIO(content_bytes), data_only=False)
+        del content_bytes
+        try:
+            col_letter, total_st, present_cnt, absent_cnt = apply_attendance_update(
+                wb=wb,
+                sheet_name=sheet_name,
+                date=date,
+                period=period,
+                absent_suffixes=absent_suffixes,
+                allow_overwrite=allow_overwrite,
+                target_col_idx=target_col_idx
+            )
+            out_buf = io.BytesIO()
+            wb.save(out_buf)
+            res_bytes = out_buf.getvalue()
+            out_buf.close()
+            del out_buf
+            return res_bytes, col_letter, total_st, present_cnt, absent_cnt
+        finally:
+            wb.close()
+            del wb
+            gc.collect()
 
 @router.post("/preview", response_model=AttendancePreviewResponse)
 async def preview_attendance(req: AttendancePreviewRequest, user: dict = Depends(get_current_user)):
