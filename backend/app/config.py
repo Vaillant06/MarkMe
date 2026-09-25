@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     SESSION_COOKIE_SECURE: bool = True
     SESSION_COOKIE_SAMESITE: str = "lax"
     
-    # Storage
-    DATABASE_URL: str = "sqlite:///./markme.db"
+    # Storage (Cloud PostgreSQL)
+    DATABASE_URL: str = ""
     
     # Front-end origin(s) for CORS (comma-separated if multiple)
     FRONTEND_URL: str = "https://markme-frontend.vercel.app"

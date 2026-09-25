@@ -1,17 +1,86 @@
 import time
 import pytest
+from contextlib import contextmanager
 from app.config import settings
 from app.auth.session import (
     create_session_token,
     verify_session_token,
     update_session_data,
     remove_session,
-    _session_store
+    _session_store,
+    is_postgres_url,
+    normalize_db_url,
+    _exec
 )
+
 from fastapi.testclient import TestClient
 from app.main import app
 
 client = TestClient(app)
+
+# In-memory mock PostgreSQL storage for test isolation when no live PG is connected
+_mock_pg_storage = {}
+
+class MockPGCursor:
+    def __init__(self, storage):
+        self.storage = storage
+        self.row = None
+
+    def execute(self, query, params=()):
+        q = query.strip()
+        if "DELETE FROM sessions WHERE expires_at <" in q:
+            now = params[0]
+            for uid, (d, exp) in list(self.storage.items()):
+                if exp < now:
+                    del self.storage[uid]
+        elif "INSERT INTO sessions" in q:
+            uid, data, updated_at, expires_at = params
+            self.storage[uid] = (data, expires_at)
+        elif "SELECT data, expires_at FROM sessions WHERE user_id =" in q:
+            uid = params[0]
+            if uid in self.storage:
+                self.row = self.storage[uid]
+            else:
+                self.row = None
+        elif "UPDATE sessions" in q:
+            data, updated_at, expires_at, uid = params
+            self.storage[uid] = (data, expires_at)
+        elif "DELETE FROM sessions WHERE user_id =" in q:
+            uid = params[0]
+            self.storage.pop(uid, None)
+
+    def fetchone(self):
+        return self.row
+
+class MockPGConnection:
+    def __init__(self, storage):
+        self.storage = storage
+        self.closed = False
+
+    def cursor(self):
+        return MockPGCursor(self.storage)
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
+
+@contextmanager
+def mock_postgres_connection():
+    conn = MockPGConnection(_mock_pg_storage)
+    yield conn
+
+@pytest.fixture(autouse=True)
+def ensure_pg_test_environment(monkeypatch):
+    """
+    If no live cloud PostgreSQL DATABASE_URL is configured, mocks the PostgreSQL connection
+    so session persistence across server restarts is tested against the PG protocol.
+    """
+    if not settings.DATABASE_URL:
+        monkeypatch.setattr(settings, "DATABASE_URL", "postgresql://mock_user:mock_pass@localhost:5432/markme")
+        monkeypatch.setattr("app.auth.session._get_connection", mock_postgres_connection)
+    yield
 
 def test_settings_session_duration():
     """Verify session settings default to 30 days (1 month)."""
@@ -20,7 +89,7 @@ def test_settings_session_duration():
     assert settings.SESSION_EXPIRE_HOURS * 3600 == 2592000  # 30 days in seconds
 
 def test_session_lifecycle_and_db_persistence():
-    """Verify session creation, persistence to SQLite, and restoration after server restart."""
+    """Verify session creation, persistence to PostgreSQL, and restoration after server restart."""
     test_user = {
         "id": "persisted_faculty_1",
         "email": "faculty1@ssn.edu.in",
@@ -41,7 +110,7 @@ def test_session_lifecycle_and_db_persistence():
     _session_store.clear()
     assert "persisted_faculty_1" not in _session_store
 
-    # 4. Verify that session is restored from SQLite
+    # 4. Verify that session is restored from PostgreSQL DB
     user_restored = verify_session_token(token)
     assert user_restored is not None
     assert user_restored["email"] == "faculty1@ssn.edu.in"
@@ -101,7 +170,7 @@ def test_api_cookie_and_restart_flow():
     # 3. Simulate server restart
     _session_store.clear()
 
-    # 4. Access /api/auth/me again with cookie - must succeed because of SQLite persistence!
+    # 4. Access /api/auth/me again with cookie - must succeed because of PostgreSQL persistence!
     me_after_restart = client.get("/api/auth/me")
     assert me_after_restart.status_code == 200
     assert me_after_restart.json()["user"]["email"] == "faculty@ssn.edu.in"
@@ -143,7 +212,7 @@ def test_workbook_selection_persistence_and_restart():
     # Simulate server restart
     _session_store.clear()
 
-    # Verify state survived restart from SQLite DB
+    # Verify state survived restart from PostgreSQL DB
     me_after = client.get("/api/auth/me", headers=headers)
     assert me_after.status_code == 200
     assert me_after.json()["selected_file_id"] == "test_wb_file_123"
@@ -185,3 +254,26 @@ def test_inaccessible_workbook_returns_404():
     res = client.get("/api/workbooks/non_existent_file_9999/details", headers=headers)
     assert res.status_code == 404
     assert "not found" in res.json()["detail"].lower()
+
+def test_postgres_url_detection():
+    """Verify detection of PostgreSQL connection strings."""
+    assert is_postgres_url("postgres://user:pass@ep-test.neon.tech/neondb?sslmode=require") is True
+    assert is_postgres_url("postgresql://user:pass@ep-test.neon.tech/neondb?sslmode=require") is True
+    assert is_postgres_url("postgres://user:pass@localhost:5432/markme") is True
+    assert is_postgres_url("sqlite:///./markme.db") is False
+    assert is_postgres_url("sqlite:////tmp/test.db") is False
+    assert is_postgres_url("") is False
+    assert is_postgres_url() is True  # Uses settings.DATABASE_URL configured in fixture
+
+
+def test_postgres_url_normalization():
+    """Verify normalizing postgres:// prefix to postgresql://."""
+    pg_url = "postgres://user:secret@dpg-abc-a.oregon-postgres.render.com/markme"
+    expected = "postgresql://user:secret@dpg-abc-a.oregon-postgres.render.com/markme"
+    assert normalize_db_url(pg_url) == expected
+
+    pg_standard = "postgresql://user:secret@dpg-abc-a.oregon-postgres.render.com/markme"
+    assert normalize_db_url(pg_standard) == pg_standard
+
+    other_url = "https://example.com"
+    assert normalize_db_url(other_url) == other_url
